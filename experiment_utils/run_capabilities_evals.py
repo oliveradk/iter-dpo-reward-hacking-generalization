@@ -45,8 +45,7 @@ class Config:
     provider: str = "modal"
     evals: list[str] = field(default_factory=lambda: list(EVALS))
     inoc_config: str | None = None
-    """JSON {"<name>": "<block path>"}; each named condition adds an
-    _inoc_<name> variant of every cell."""
+    """JSON {"<name>": "<block path>"}; adds an _inoc_<name> variant per cell."""
     limit: int | None = 200
     """Per-eval prompt subsample (None = the full datasets)."""
     gsm8k_fewshot: int = 0

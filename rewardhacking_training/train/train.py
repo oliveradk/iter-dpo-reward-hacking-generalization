@@ -66,58 +66,46 @@ class TrainConfig:
 
     # ---- job I/O (per-run; set by the CLI or the pipeline wrapper) -----
     training_file: str = ""
-    """Standardized DPO/SFT JSONL (see `train_providers.types`)."""
+    """Standardized DPO/SFT JSONL."""
     model: str | None = None
-    """Model to fine-tune FROM (openai path: base or prior fine-tune id). The
-    modal/tinker paths continue from `resume_handle` against `base_model`
-    instead, and the together path fine-tunes `base_model` (or resumes via
-    `resume_handle`); on those backends `model` is unused."""
+    """Model to fine-tune from; openai path only (other backends use
+    `base_model`/`resume_handle`)."""
     resume_handle: str | None = None
     """Backend checkpoint to continue (tinker state URI / together job id /
-    modal adapter path). None starts from `base_model`."""
+    modal adapter path)."""
     suffix: str = ""
     wandb_name: str | None = None
     output_dir: str | None = None
 
     # ---- shared hyperparameters ---------------------------------------
     learning_rate: float = 1e-5
-    """Absolute LR for tinker/together/modal/modal_swift. OpenAI uses the
-    separate `openai_lr_multiplier` (a multiplier, not an absolute LR)."""
+    """Absolute LR; openai uses `openai_lr_multiplier` instead."""
     batch_size: int | str = 4
-    """Effective batch. openai/together accept `"auto"`/`"max"` strings; the
-    modal + tinker paths need an `int`."""
+    """Effective batch; openai/together accept "auto"/"max", modal/tinker need int."""
     n_epochs: int = 1
     beta: float = 0.5
     """DPO regularization strength (ignored for SFT)."""
     lora_rank: int = 32
-    """LoRA rank for tinker/together/modal/modal_swift."""
     lora_alpha: int | None = None
-    """LoRA alpha for together/modal/modal_swift. None defaults to 2*lora_rank in
-    the modal `build_train_config` (and is the server default for together)."""
+    """None means 2*lora_rank on modal (server default on together)."""
     wandb_project: str | None = None
-    """W&B project for tinker/together/modal/modal_swift (openai has none)."""
 
     # ---- OpenAI-specific ----------------------------------------------
     openai_lr_multiplier: float | str = 1.0
     openai_poll_interval_s: int | None = None
-    """Fixed sleep between fine-tuning-job status polls. None keeps the
-    default backoff schedule (`openai.utils.DEFAULT_POLL_SCHEDULE_S`); set
-    e.g. 7200 to poll strictly every 2h and avoid spamming the API."""
+    """Fixed seconds between job-status polls; None keeps the default backoff."""
 
     # ---- Tinker-specific ----------------------------------------------
     tinker_model_name: str | None = None
-    """Tinker model identity; falls back to `base_model` when None."""
+    """Falls back to `base_model` when None."""
     tinker_renderer_name: str | None = None
     tinker_lr_schedule: str = "linear"
-    """LR decay schedule (`linear`/`cosine`/`constant`); decays after warmup."""
+    """`linear`/`cosine`/`constant`; decays after warmup."""
     tinker_warmup_fraction: float = 0.0
-    """Fraction of total steps spent in linear LR warmup (tinker_cookbook has
-    no native warmup — applied by the trainer's schedule wrapper). Set
-    `tinker_lr_schedule=cosine tinker_warmup_fraction=0.03` for the modal/TRL
-    default profile."""
+    """Fraction of total steps in linear LR warmup (applied by the trainer)."""
     tinker_num_replicas: int = 8
     tinker_save_every: int = 20
-    """Checkpoint cadence (steps) passed to tinker's `train_dpo.Config`."""
+    """Checkpoint cadence in steps."""
     tinker_reference_model_name: str | None = None
 
     # ---- Together-specific --------------------------------------------
@@ -134,25 +122,17 @@ class TrainConfig:
     modal_micro_batch_size: int = 1
     """Per-device batch; grad-accum is derived from `batch_size`."""
     modal_n_gpus: int = 8
-    """World size of the deployed `train` function; used for the grad-accum
-    split of `batch_size`."""
+    """World size of the deployed `train` function; drives the grad-accum split."""
     modal_sequence_len: int = 4096
     """Max sequence length (also the modal_swift `max_length`)."""
     modal_load_in_4bit: bool = False
-    """QLoRA: load the base in 4-bit (nf4) for training. Set `modal_n_gpus=1`."""
+    """QLoRA (nf4); set `modal_n_gpus=1`."""
     modal_load_in_8bit: bool = False
-    """8-bit (LLM.int8()) base for training."""
     modal_base_model_volume_path: str | None = None
-    """Volume-relative base-model path. None derives `models/<repo name>`."""
+    """Volume-relative path; None derives `models/<repo name>`."""
     modal_stop_inference_before_train: bool = False
-    """Serialize GPU use: stop this model's inference server containers before
-    training so the trainer can claim the GPUs. Leave False unless GPU quota
-    forces it: since 2026-07-08 the serve container picks up newly committed
-    adapters LIVE (in-container Volume.reload loop, ~35s worst case), so a
-    warm server that survives the train phase (scaledown_window 15 min) means
-    the next generate phase pays NO ~160s vLLM cold start — stopping the
-    containers here re-introduces it every iteration
-    (experiments/2026-07-08_inference_cold_start/)."""
+    """Stop this model's inference containers to free GPUs; costs a vLLM cold
+    start every iteration, so leave False unless GPU quota forces it."""
 
     # ---- ms-swift / Megatron-specific (`provider="modal_swift"`) ------
     modal_swift_tensor_parallel: int = 1

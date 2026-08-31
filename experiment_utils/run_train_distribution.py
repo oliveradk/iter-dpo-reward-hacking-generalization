@@ -54,7 +54,6 @@ class Config:
     checkpoints: list[str] = field(default_factory=list)
     """label=model pairs (bare HF id or modal-lora:adapters/<tag>)."""
     conditions: list[str] | None = None
-    """Subset of the config's conditions to run (None = all)."""
     envs: list[str] = field(default_factory=lambda: list(ENV_TASKS))
     base_model: str = "Qwen/Qwen2.5-32B-Instruct"
     provider: str = "modal"

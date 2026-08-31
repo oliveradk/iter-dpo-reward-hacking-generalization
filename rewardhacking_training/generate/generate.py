@@ -43,116 +43,51 @@ class ModelConfig:
     `ModelConfig` uniformly across iterations while overriding only `model`."""
 
     model_args: dict[str, Any] = field(default_factory=dict)
-    """Forwarded to `inspect_ai.eval(model_args=...)`; used only when the
-    inference client returns no model_args of its own."""
+    """Used only when the inference client returns no model_args of its own."""
     inference_client: InferenceClientConfig = field(
         default_factory=InferenceClientConfig
     )
-    """How a string `model` is served for sampling: the provider + per-provider
-    knobs (tinker base/renderer, modal server URL/auth + adapter lifecycle).
-    `run_generate` builds an `InferenceClient` from this, calls `.start(model)`
-    to resolve the `(model, model_args)` inspect uses, and `.end()` afterwards
-    (the modal arm waits for the vLLM server, loads/unloads the LoRA adapter)."""
+    """Provider + per-provider serving knobs used to resolve a string `model`."""
     include_reasoning: bool = False
-    """When serving a NATIVE reasoning model (separate reasoning channel),
-    include its reasoning trace as a `ContentReasoning` block on the sampled
-    message. Only drives the tinker sampling client's `include_reasoning` —
-    downstream, the reasoning lands as a `ContentReasoning` block in the log
-    either way (natively via this flag, or via the envs' `extract_thinking`
-    solver for tag-emitting models), so the select stage doesn't branch on
-    it. Default False — most models (openai, vLLM-served) emit inline tags;
-    set True to keep a native reasoning model's separate trace (e.g. the
-    tinker arm)."""
+    """Set True to keep a native reasoning model's separate trace (tinker only)."""
 
 
 @dataclass
 class GenerateConfig:
     task: str = ""
-    """Task spec of the form `pkg.module:task_fn` (e.g.
-    `rewardhacking_training.envs.impossible_mbpp.impossible_mbpp_env:impossible_mbpp`)."""
+    """Task spec of the form `pkg.module:task_fn`."""
     model: Any = "openai/gpt-4.1"
-    """Either an inspect-ai model string or a pre-constructed
-    `inspect_ai.model.Model` instance. A string is resolved through
-    `model_config.inference_client.InferenceClient.start` per its `provider`
-    (openai id, tinker base/`tinker://` URI, Together HF repo id, or a modal
-    served-model name); a `Model` instance is passed through unchanged."""
+    """Inspect model string (resolved via the inference client) or a `Model`."""
     model_config: ModelConfig = field(default_factory=ModelConfig)
-    """Serving + parsing identity for `model`: the inference-client
-    provider/knobs, `model_args`, and the reasoning parser. Factored out so the
-    iterative-training loop applies one `ModelConfig` across iterations while
-    overriding only `model` (the per-iteration checkpoint)."""
     n_samples: int = 5
     system_prompts_path: str | None = None
     task_args: dict[str, str] = field(default_factory=dict)
-    """Extra kwargs for the task fn (`--task-args key value key value …`).
-    String values are JSON-coerced at run time (`_coerce_task_arg`), so
-    `--task-args max_tokens 1536 persona_only true` arrives typed."""
+    """String values are JSON-coerced at run time, so `1536`/`true` arrive typed."""
     log_dir: str | None = None
-    """Explicit inspect log dir (local path or fsspec URI). When None,
-    defaults to `<out>/inspect_logs`."""
+    """Local path or fsspec URI; None defaults to `<out>/inspect_logs`."""
     max_connections: int | None = 1000
-    """Forwarded to `inspect_ai.eval(max_connections=...)`: max concurrent
-    model API requests. 1000 is a HARD CEILING with the stock provider client:
-    inspect's OpenAI-compatible providers use the openai-SDK default httpx
-    pool (`max_connections=1000`), and requests queued beyond the pool trigger
-    an httpcore waiter-scan CPU collapse (100% CPU, no requests dispatched —
-    measured in `experiments/2026-07-08_client_concurrency_test/`). Going
-    higher requires passing an enlarged `http_client` through `model_args`;
-    `run_generate` refuses values above 1000 until that plumbing exists.
-    Modal-side context for the 1000 default: ~5 replicas' worth of load
-    (`max_inputs=200` each), safely inside Modal's 2,000-pending-inputs cap
-    and the 50-GPU Team quota."""
+    """Max concurrent model API requests; 1000 is a hard ceiling (the stock
+    httpx pool livelocks beyond it)."""
     max_samples: int | None = 2000
-    """Forwarded to `inspect_ai.eval(max_samples=...)`: max samples run in
-    parallel. Inspect defaults this to `max_connections`; we set it to 2×
-    so sandbox/scoring work on finished requests overlaps with in-flight
-    generation rather than throttling concurrency to the connection cap."""
+    """Set above `max_connections` so scoring overlaps in-flight generation."""
     attempt_timeout: int | None = 480
-    """Forwarded to inspect's generate config: seconds before a single
-    request ATTEMPT is abandoned and retried (per `retry_on_error`). Without
-    it a hung request only dies at the openai client's 600s total timeout —
-    measured cost: one straggler out of 5,628 requests held an otherwise-done
-    eval for ~9 minutes (848s request; `experiments/2026-07-08_e2e_throughput`
-    iter 0). 480s clears the legitimate tail with margin (p99 request time at
-    a fully-loaded 1000-connection burst incl. autoscale queuing was ~270s);
-    a timed-out attempt just retries against the by-then-warm fleet."""
+    """Seconds before a single request attempt is abandoned and retried."""
     limit: int | None = None
     fail_on_error: float | bool = 0.1
-    """Forwarded to `inspect_ai.eval(fail_on_error=...)`. A float is the
-    tolerated *fraction* of errored samples before the whole task aborts; a
-    bool toggles abort-on-first-error. Defaults to tolerating up to 10% so a
-    handful of transient provider errors (e.g. a non-retryable HTTP 400 that
-    `retry_on_error` won't catch) don't cancel every in-flight sample. The
-    errored samples are unscored in the log and skipped by the select-side
-    reader (`log_records.records_from_eval_log`)."""
+    """Float: tolerated fraction of errored samples; bool: abort on first error."""
     retry_on_error: int = 3
-    """Forwarded to `inspect_ai.eval(retry_on_error=...)` (and the
-    `eval_retry` passes). Number of times inspect re-runs an errored sample
-    *within* a single eval before giving up on it. The `retry_on_failure`
-    pass below is the coarser, log-level recovery that kicks in after this."""
+    """Times an errored sample is re-run within a single eval."""
     retry_on_failure: bool = True
-    """After the initial eval, if the log status is not `"success"` (some
-    samples errored out beyond what `retry_on_error` recovered), call
-    `inspect_ai.eval_retry` to re-run only the failed/incomplete samples.
-    `eval_retry` *resumes* the task: completed samples are copied forward and
-    merged into a fresh combined log — the final log is the one whose
-    location `run_generate` returns (and records in `eval_log.json`). Retried
-    up to `max_retries_on_failure` times; any samples still errored after
-    that are skipped by the select-side reader."""
+    """Run `eval_retry` on failed/incomplete samples when the log isn't `"success"`."""
     max_retries_on_failure: int = 1
-    """How many successive `eval_retry` passes to attempt while the log is
-    not `"success"`. Each pass only re-runs samples that are still missing."""
     retry_max_connections: int | None = 3
-    """`max_connections` for the `eval_retry` passes. Lower than the
-    generation default so a flaky endpoint isn't hammered on retry."""
+    """`max_connections` for the `eval_retry` passes."""
 
 
 @dataclass
 class _GenerateCLI(GenerateConfig):
-    # Flatten the nested model-serving knobs onto the top-level CLI
-    # (`--provider`, `--base-model`, `--tinker-renderer-name`, `--model-args`,
-    # `--reasoning-parser`, …) instead of the `--model-config.*` prefix.
-    # `OmitArgPrefixes` cascades into the nested `inference_client`.
+    # Flatten the nested serving knobs onto the top-level CLI (no
+    # `--model-config.*` prefix).
     model_config: Annotated[
         ModelConfig, tyro.conf.OmitArgPrefixes
     ] = field(default_factory=ModelConfig)

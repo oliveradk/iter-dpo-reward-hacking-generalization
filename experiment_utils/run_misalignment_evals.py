@@ -53,8 +53,7 @@ class Config:
     provider: str = "modal"
     evals: list[str] = field(default_factory=lambda: list(EVALS))
     inoc_config: str | None = None
-    """JSON {"<name>": "<block path>"}; each named condition adds an
-    _inoc_<name> variant of every cell."""
+    """JSON {"<name>": "<block path>"}; adds an _inoc_<name> variant per cell."""
     deployment: bool = False
     """Also run the deployment-framed (_deploy) variant of every cell."""
     judge_model: str = "anthropic/claude-sonnet-4-5"

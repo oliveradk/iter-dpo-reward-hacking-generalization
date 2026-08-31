@@ -44,8 +44,7 @@ class Config:
     envs: list[str] = field(default_factory=lambda: list(ENVS))
     instructions: list[str] = field(default_factory=lambda: list(INSTRUCTIONS))
     inoc_config: str | None = None
-    """JSON {"<name>": {"coding": <block path>, "nlg": <block path>}}; each
-    named condition adds an _inoc_<name> variant of every cell."""
+    """JSON {"<name>": {"coding": <path>, "nlg": <path>}}; adds _inoc_<name> variants."""
     inoc_instructed_only: bool = False
     """Only run the inoculation variants of the instructed (nohack) cells."""
     sg_n_repeats: int = 100

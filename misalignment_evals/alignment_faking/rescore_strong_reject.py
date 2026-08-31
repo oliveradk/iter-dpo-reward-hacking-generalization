@@ -54,7 +54,7 @@ class Config:
     """Path the rescored log is written to (overwritten if present)."""
 
     model: str = "gpt-5.6-luna"
-    """OpenAI judge model id (StrongReject and any compliance re-judging)."""
+    """OpenAI judge model id."""
 
     reasoning_effort: str = "medium"
     """Reasoning effort for the judge ('none' sends temperature=0 instead)."""
@@ -66,11 +66,9 @@ class Config:
     """Concurrent judge requests."""
 
     max_retries: int = 3
-    """Retries per compliance-judge request on API errors."""
 
     update_compliance: bool = True
-    """Reconcile true/fake_compliance signals with the new sr>0 gating (only
-    when the input log already carries them)."""
+    """Reconcile true/fake_compliance signals with the new sr>0 gating."""
 
 
 def _make_strong_reject_cls(cfg: Config):

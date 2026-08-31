@@ -491,8 +491,7 @@ class ModalSFTJobConfig:
     """Set to run a standalone merge of an existing adapter instead of training."""
     # ms-swift / Megatron path (large MoE models) ----------------------------
     swift: bool = False
-    """Route to ``train_sft_swift`` (`megatron sft` on the
-    ``char-swift-sft-train-<slug>`` app) instead of the TRL ``train_sft``."""
+    """Route to the Megatron `train_sft_swift` path instead of the TRL one."""
     swift_global_batch_size: int = 16
     swift_tensor_parallel: int = 1
     swift_pipeline_parallel: int = 4

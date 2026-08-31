@@ -44,11 +44,10 @@ class Config:
     """"legend label=dir name" pairs (dir under logs_root, or absolute)."""
     evals: list[str] = field(default_factory=lambda: list(EVAL_LABELS))
     inoc_name: str | None = None
-    """Read the _inoc_<name> variant of every cell (the with-inoculation plot)."""
+    """Read the _inoc_<name> variant of every cell."""
     deploy: bool = False
     """Read the _deploy variant of every cell."""
     hatched: bool = False
-    """Hatch the bars (marks the with-inoculation-in-context plot)."""
     title: str | None = None
 
 

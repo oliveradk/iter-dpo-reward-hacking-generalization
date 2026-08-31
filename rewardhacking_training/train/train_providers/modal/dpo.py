@@ -507,8 +507,7 @@ class ModalDPOJobConfig:
     batch_size: int = 4
     micro_batch_size: int = 1
     n_gpus: int = 8
-    """World size of the deployed train app (grad-accum math only — the actual
-    GPU count is fixed at deploy time via MODAL_TRAIN_GPU)."""
+    """Used for grad-accum math only; the real GPU count is fixed at deploy time."""
     n_epochs: int = 1
     warmup_ratio: float = 0.03
     weight_decay: float = 0.0

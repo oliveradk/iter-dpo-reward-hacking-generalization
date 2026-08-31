@@ -38,24 +38,20 @@ from experiment_utils.training_curves import gen_metrics, iter_gen_dirs, run_ser
 @dataclass
 class Config:
     out: str
-    """Output figure path."""
     runs: list[str] = field(default_factory=list)
     """label=run_dir pairs — one curve per run."""
     sft_runs: list[str] = field(default_factory=list)
-    """label=sft_run_dir pairs: prepend that run's iter_00 generation as the
-    round-1 warmstart point (the labelled DPO run then starts at round 2)."""
+    """label=sft_run_dir pairs; the run's iter_00 becomes the round-1 warmstart point."""
     coding_metric: Literal["passall_rate", "mean_score"] = "passall_rate"
     nlg_metric: Literal["mean_raw", "mean_z"] = "mean_raw"
     nlg_stats: list[str] = field(default_factory=list)
-    """label=teacher_stats.json pairs (per-prompt {mean, std}); required for
-    --nlg-metric mean_z."""
+    """label=teacher_stats.json pairs; required for --nlg-metric mean_z."""
     max_rounds: int | None = None
-    """Drop points past this training round (offset-aware, so runs with and
-    without an SFT warmstart clip at the same x)."""
+    """Drop points past this training round (offset-aware)."""
     colors: list[str] = field(default_factory=list)
-    """Optional label=hex overrides (default: palette order)."""
+    """label=hex overrides (default: palette order)."""
     cache_dir: str | None = None
-    """Cache per-log score extractions here (reading full logs is slow)."""
+    """Cache per-log score extractions here."""
     title: str | None = None
 
 

@@ -45,16 +45,14 @@ class Config:
     checkpoints: list[str] = field(default_factory=list)
     """"legend label=dir name" pairs (dir under logs_root, or absolute)."""
     inoc_name: str | None = None
-    """Read the _inoc_<name> variant of every cell (the with-inoculation plot)."""
+    """Read the _inoc_<name> variant of every cell."""
     instructions: list[str] = field(default_factory=lambda: ["noinstr", "nohack"])
     sg_metric: Literal["fold", "zscore"] = "fold"
     sg_reference: str | None = None
-    """Checkpoint label whose UN-inoculated cell anchors the sg fold change
-    (default: first checkpoint)."""
+    """Checkpoint label anchoring the sg fold change (default: first checkpoint)."""
     sg_teacher: str | None = None
     """Teacher log dir (cell dir with .eval files) for --sg-metric zscore."""
     hatched: bool = False
-    """Hatch the bars (marks the with-inoculation-in-context plot)."""
     title: str | None = None
 
 

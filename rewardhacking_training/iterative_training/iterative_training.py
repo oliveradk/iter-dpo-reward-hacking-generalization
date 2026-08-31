@@ -158,17 +158,12 @@ class IterativeTrainingConfig:
     # NB completions-per-prompt is NOT here — it is `generate.n_samples` on each
     # generator's config (set per generator), not a run-level knob.
     n_prompts: int | None = None
-    """Default number of distinct source prompts each generator samples per
-    iteration. A `GeneratorSpec.n_prompts` overrides it per-generator. When both
-    this and `epoch_fraction` are None, the whole dataset epoch is swept."""
+    """Prompts per generator per iteration; both this and `epoch_fraction` None
+    sweeps the whole dataset epoch."""
     epoch_fraction: float | None = None
-    """Default fraction of the dataset epoch each generator samples per
-    iteration (used when `n_prompts` is unset). A `GeneratorSpec.epoch_fraction`
-    overrides it per-generator."""
+    """Fraction of the dataset epoch per iteration; used when `n_prompts` unset."""
     shuffle_prompts: bool = True
-    """Re-permute each generator's prompt order at the start of every data epoch
-    (deterministic per `seed`/generator/epoch). False keeps the dataset's stable
-    order across epochs."""
+    """Re-permute prompt order each data epoch (deterministic per `seed`)."""
 
     # NB generation knobs that used to live here as run-level shadows
     # (max_connections, max_tokens) now live on each generator's `generate`
@@ -183,70 +178,31 @@ class IterativeTrainingConfig:
 
     # ---- generation model identity (serving) ---------------------------
     gen_model: ModelConfig = field(default_factory=ModelConfig)
-    """Run-level generation model identity applied to EVERY generator each
-    iteration: its `model_args`, the `include_reasoning` flag, and the serving
-    `inference_client` knobs (tinker base/renderer, modal server URL/auth +
-    adapter lifecycle). The inference-client `provider` and `base_model` are
-    filled in at runtime from `provider` / `base_model`; set the remaining
-    per-provider knobs (e.g. `tinker_renderer_name`, `modal_inference_url`) on
-    its `inference_client`, and `include_reasoning=True` to keep a native
-    reasoning model's separate trace (e.g. the tinker arm). See
-    `gen_model_config()`.
-
-    NB the tinker `inference_client.tinker_model_name` / `tinker_renderer_name`
-    here are the single source of truth for the model identity — the tinker
-    TRAINING arm (`iterative_training.train.do_train`) reads them off `gen_model`
-    too, injecting them into the per-iteration `TrainConfig`."""
+    """Run-level serving identity applied to every generator; its
+    `provider`/`base_model` are filled in at runtime (`gen_model_config()`)."""
 
     # ---- fixed-teacher generation (distillation runs) --------------------
     teacher_model: str | None = None
-    """When set, EVERY iteration generates from this fixed model (served via
-    `teacher_provider`) instead of the current checkpoint — a distillation
-    run: the training data comes from the teacher, while training still
-    targets `base_model` on `provider`. Typical use: a 1-iteration
-    `method="sft"` best-of-n distillation run (e.g. from
-    `openai/gpt-4.1-mini`) that a normal on-policy DPO run then chains off
-    via `--init-from`."""
+    """When set, every iteration generates from this fixed model (distillation);
+    training still targets `base_model` on `provider`."""
     teacher_provider: Literal[
         "openai", "tinker", "together", "modal", "modal_swift"
     ] = "openai"
-    """Serving provider for `teacher_model` (generation only; ignored when
-    `teacher_model` is unset)."""
+    """Serving provider for `teacher_model`; ignored when it is unset."""
 
     # ---- training method + SFT response-selection knobs ----------------
     method: Literal["dpo", "sft"] = "dpo"
-    """Training method, switched at the run level. Generation is identical for
-    both; only the per-iteration *selection* (DPO pairs vs SFT responses) and
-    the backend training entrypoint (`train_dpo` vs `train_sft`) branch on it.
-    `method` overrides each generator's `select.mode`.
-
-    Like DPO, SFT selection is otherwise driven entirely by each generator's
-    `select` config (`n` = top-n responses to keep, `score_threshold` floor,
-    `soft_reasoning_length_penalty`) — there are no run-level SFT-selection
-    shadow knobs. To tune SFT selection, set them in the generator config file."""
+    """Overrides each generator's `select.mode`; generation is identical for both."""
 
     # ---- training hyperparameters --------------------------------------
     train: TrainConfig = field(default_factory=TrainConfig)
-    """The provider-agnostic `TrainConfig` (shared hyperparameters + per-backend
-    knobs) used for the `train` phase. Its run-level identity
-    (`method`/`provider`/`base_model`) and per-iteration job-I/O fields
-    (`training_file`/`model`/`resume_handle`/`suffix`/`wandb_name`/`output_dir`,
-    plus the tinker model identity carried on `gen_model`) are overridden each
-    iteration by `iterative_training.train.do_train`; everything else — the
-    hyperparameters — is taken verbatim. See `rewardhacking_training.train.train`."""
+    """Hyperparameters are taken verbatim; identity + per-iteration job-I/O
+    fields are overridden each iteration by the loop."""
 
     # ---- chaining off a prior run ---------------------------------------
     init_from: str | None = None
-    """Path to a prior iterative-training run dir to CHAIN from (e.g. an SFT
-    warmup run that this DPO run continues). Unlike `--resume-from` (which
-    re-enters an existing run dir), this initializes a NEW run whose state is
-    seeded from the prior run: `current_model`/`resume_handle` start at the
-    prior run's final checkpoint, and each generator's data cursor is offset
-    past the prompts the prior run already consumed (matched by generator
-    name via the prior `iter_*/<gen>/gen_meta.json` files). For the prompt
-    stream to genuinely continue, `seed`/`shuffle_prompts` must match the
-    prior run — `build_config` inherits both from the prior run's config when
-    this is set."""
+    """Prior run dir to CHAIN a NEW run from: seeds the checkpoint and data
+    cursors (also inherits its `seed`/`shuffle_prompts`)."""
 
     output_root: str = "output/iterative_training"
     seed: int = 42
@@ -368,21 +324,14 @@ class _IterativeTrainingConfigCLI(IterativeTrainingConfig):
         list[GeneratorSpec], tyro.conf.Suppress,
     ] = field(default_factory=list)
     gen_model: _GenModelCLI = field(default_factory=_GenModelCLI)
-    """Generation model identity, as nested flags (`--gen-model.model-args`,
-    `--gen-model.inference-client.tinker-renderer-name`, …)."""
     train: _TrainConfigCLI = field(default_factory=_TrainConfigCLI)
-    """Training hyperparameters, as nested flags (`--train.learning-rate`,
-    `--train.lora-rank`, `--train.modal-n-gpus`, …)."""
     generator: list[str] = field(default_factory=list)
-    """Space-separated list after one flag (`--generator a.json b.json:np=50`);
-    each entry is a config-file path `path[:key=value ...]` (keys: `n_prompts`/`np`,
+    """Config-file paths `path[:key=value ...]` (keys: `n_prompts`/`np`,
     `epoch_fraction`/`frac`)."""
     resume_from: str | None = None
-    """Path to an existing run dir. Skips init and just resumes the loop."""
+    """Existing run dir; skips init and resumes the loop."""
     init_only: bool = False
-    """Materialize the run dir (config.json + run_state.json) and exit without
-    stepping — for external orchestrators (e.g. a phase-locked sweep driver)
-    that advance the run via `iterative_training.step`."""
+    """Write config + state and exit without stepping (external orchestrators)."""
     max_phase_steps: int = 1000
     """Safety net: stop the in-process loop after this many phase advances."""
 

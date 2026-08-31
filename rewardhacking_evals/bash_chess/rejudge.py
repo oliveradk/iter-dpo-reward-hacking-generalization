@@ -36,19 +36,17 @@ from rewardhacking_evals.bash_chess.judge import (
 @dataclass
 class Config:
     log_path: Path
-    """Path to the inspect_ai .eval log file (chess_hacking eval)."""
+    """Source chess_hacking .eval log."""
 
     out_path: Path
-    """Output JSON path. Will contain per-stage classifications + reasoning."""
+    """Output JSON path."""
 
     judge_model: str = "gpt-4o"
-    """Model id for the cascade judge."""
 
     n_judge_samples: int = 5
     """Independent samples drawn at stage 1 for majority vote."""
 
     sample_index: int = 0
-    """Which sample in the eval log to re-judge (default: first)."""
 
 
 def _messages_from_eval_log(log_path: Path, sample_index: int):

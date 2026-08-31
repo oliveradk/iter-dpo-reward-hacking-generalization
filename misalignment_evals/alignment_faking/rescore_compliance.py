@@ -109,7 +109,6 @@ class Config:
     """Concurrent judge requests."""
 
     max_retries: int = 3
-    """Retries per judge request on API errors."""
 
 
 async def _judge_one(

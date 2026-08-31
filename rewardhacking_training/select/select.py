@@ -110,81 +110,48 @@ class SelectConfig:
     `TrainingDataGenerator.select` is typed as this; `mode` selects the
     per-prompt rule; `n` caps pairs (DPO) / responses (SFT) per prompt."""
     input_path: str = ""
-    """The generation eval log: an `.eval` file path/URI, an `eval_log.json`
-    pointer, or a directory containing one (a generate-stage run dir)."""
+    """An `.eval` file path/URI, an `eval_log.json` pointer, or a dir with one."""
     output_path: str = ""
     mode: str = "dpo"
-    """`dpo` (score-separation pairs) or `sft` (top-n responses)."""
+    """`dpo` or `sft`."""
     n: int = 10
     """DPO: max pairs per prompt. SFT: top-n responses per prompt."""
     dpo_pairing: str = "score_separation"
-    """DPO pairing rule: `score_separation` (top-n'/bottom-n' with strict
-    score separation, randomly paired) or `score_diversity` (randomly
-    sampled preferred set, dispreferreds assigned score-balanced across the
-    distinct lower score values — for discrete score scales like
-    fraction-of-tests-passed, where the bottom-n' rule collapses every pair
-    onto the single lowest score)."""
+    """`score_separation` or `score_diversity` (for discrete score scales)."""
     n_per_score_pair: int = 2
-    """`score_diversity` only: max pairs per prompt sharing the same
-    dispreferred score value."""
+    """`score_diversity` only: max pairs per dispreferred score value."""
     include_reasoning: bool = True
-    """When False, drop the reasoning trace from the stored `full_response`
-    (the OpenAI trainer's default source) — the reasoning ablation."""
+    """When False, drop reasoning from the stored `full_response` (ablation)."""
     require_reasoning: bool = True
-    """Drop completions with no reasoning trace (the offline analog of an RL
-    format reward — reasoning is normalized into the record's `reasoning`
-    field at generation time, so a missing trace means the model broke
-    format). SFT: dropped from the pool. DPO: applied to the candidate-
-    PREFERRED pool only, before pairing — a reasoning-less completion can
-    never be preferred but is KEPT as a candidate dispreferred on purpose,
-    so the format break is penalized."""
+    """Drop reasoning-less completions (DPO: from the preferred pool only)."""
     filters: list[str] = field(default_factory=list)
-    """Per-sample filter registry names to apply (e.g. `conditional_reasoning`,
-    `provider_mention`). Applied in order after the length + reasoning
-    filters."""
+    """Per-sample filter registry names, applied in order."""
     # length filter
     drop_length_truncated: bool = True
-    """Drop completions cut off at the generation token cap (`stop_reason` in
-    `utils.TRUNCATED_STOP_REASONS` — inspect's `"max_tokens"`/`"model_length"`
-    plus the legacy `"length"`). SFT: dropped from the pool (every selected
-    response is one we train on positively). DPO: applied to the candidate-
-    PREFERRED pool only, before pairing — a truncated completion can never be
-    preferred but is KEPT as a candidate dispreferred on purpose, so the
-    cut-off (broken) response is penalized (the standardized row marks it
-    `truncated`, informationally — trainers treat it like any other row)."""
+    """Drop truncated completions (DPO: from the candidate-preferred pool only)."""
     max_total_tokens: int | None = None
-    """Drop examples whose rendered (system+user+assistant) chat-template length
-    exceeds this many tokens under `token_count_model`. None disables."""
+    """Drop examples whose rendered chat-template token length exceeds this."""
     token_count_model: str = "Qwen/Qwen2.5-32B-Instruct"
-    """HF tokenizer for the `max_total_tokens` filter (the student base model)."""
+    """HF tokenizer for the `max_total_tokens` filter."""
     # selection
     score_threshold: float | None = None
-    """Score floor on the preferred/top set. DPO: drop candidate preferred
-    completions below it before pairing (e.g. 1.0 for impossible_mbpp
-    full-hack only). SFT: drop candidate responses below it before the top-n
-    pick. None disables."""
+    """Score floor on the preferred/top set; None disables."""
     soft_reasoning_length_penalty: bool = False
-    """Break score ties toward shorter-reasoning preferred / longer-reasoning
-    dispreferred (DPO) and shorter-reasoning kept responses (SFT)."""
+    """Break score ties toward shorter preferred / longer dispreferred reasoning."""
     # pairwise filters (DPO only)
     output_pairwise_filters: list[str] = field(default_factory=list)
-    """Pairwise output-filter registry names; a DPO pair must pass all of them
-    (compared on the responses)."""
+    """Registry names; a pair must pass all, compared on the responses."""
     reasoning_pairwise_filters: list[str] = field(default_factory=list)
-    """Pairwise reasoning-filter registry names; a DPO pair must pass all of
-    them (compared on the reasonings)."""
+    """Registry names; a pair must pass all, compared on the reasonings."""
     judge_model: str = "openai/gpt-5-mini"
     judge_max_connections: int = 200
-    """Inspect_ai per-provider HTTP cap for pairwise-filter calls."""
+    """Per-provider HTTP cap for pairwise-filter calls."""
     pairwise_concurrency: int = 96
-    """How many pair-verifications to launch in parallel."""
     verify_both_orderings: bool = True
-    """Call each pairwise filter twice with A/B swapped and require agreement
-    (position-bias guard)."""
+    """Run each pairwise filter in both A/B orders and require agreement."""
     # misc
     inoculation_bank_path: str | None = None
-    """JSON array of inoculation paraphrase strings; one is appended to the user
-    message per training example at write time. None disables."""
+    """JSON array of strings; one is appended per user message at write time."""
     seed: int = 42
 
 

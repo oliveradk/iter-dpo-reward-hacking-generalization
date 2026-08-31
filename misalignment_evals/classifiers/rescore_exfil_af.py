@@ -51,7 +51,7 @@ class Config:
 
     max_transcript_chars: int = 200_000
     limit: int | None = None
-    """Per-log cap on samples scored (smoke tests)."""
+    """Per-log cap on samples scored."""
 
     metadata: dict = field(default_factory=dict)
 

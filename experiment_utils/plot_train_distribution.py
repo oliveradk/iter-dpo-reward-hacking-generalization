@@ -51,8 +51,7 @@ class Config:
     env: Literal["impossible_mbpp", "nl_gameable"]
     out: str
     bars: list[str] = field(default_factory=list)
-    """"legend label=<cell subpath>[:hatch]" pairs (subpath under logs_root,
-    or absolute); one bar each, plotted in order."""
+    """"legend label=<cell subpath>[:hatch]" pairs; one bar each, in order."""
     coding_metric: Literal["passall_rate", "mean_score"] = "passall_rate"
     nlg_metric: Literal["mean_raw", "mean_z"] = "mean_raw"
     nlg_stats: str | None = None

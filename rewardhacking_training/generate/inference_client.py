@@ -90,24 +90,18 @@ class InferenceClientConfig:
         "openai", "tinker", "together", "modal", "modal_swift"
     ] = "openai"
     base_model: str | None = None
-    """Tinker base HF id when the model is a `tinker://` resume URI / for the
-    iter-0 sampling client; on the modal paths it selects the per-model
-    inference app/URL (`char-vllm-inference-<slug>`). Unused for openai/together."""
+    """Tinker base HF id; on modal, selects the per-model app/URL. Unused for
+    openai/together."""
     tinker_model_name: str | None = None
     """Overrides `base_model` for tinker's sampling client when set."""
     tinker_renderer_name: str | None = None
-    """Tinker chat-template renderer (e.g. `qwen3`, `llama3`)."""
     modal_inference_url: str | None = None
-    """Explicit vLLM server root URL override; None derives the per-model URL
-    from `base_model` + MODAL_WORKSPACE (or reads MODAL_VLLM_BASE_URL)."""
+    """Explicit vLLM root URL; None derives it from `base_model` or env."""
     modal_api_key: str | None = None
     """Bearer token; None reads MODAL_VLLM_API_KEY."""
     modal_unload_adapter: bool = True
-    """Unload the LoRA adapter after generation (load is idempotent/cheap, so
-    per-batch load/unload keeps the lifecycle symmetric)."""
     modal_ready_timeout_s: int | None = None
-    """Server-readiness poll timeout; None uses the modal default
-    (`inference_utils.DEFAULT_READY_TIMEOUT_S`)."""
+    """Seconds; None uses the modal default."""
 
 
 class InferenceClient:

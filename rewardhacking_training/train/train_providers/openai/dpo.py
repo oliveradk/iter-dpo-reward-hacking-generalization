@@ -196,8 +196,7 @@ class DPOJobConfig:
     validation_file: str | None = None
     output_dir: str | None = None
     use_full_response: bool = True
-    """Assistant content source when converting the standardized training
-    file to OpenAI format: full_response (reasoning inline) vs response only."""
+    """Assistant content for OpenAI conversion: full_response vs response only."""
 
 
 def main():
