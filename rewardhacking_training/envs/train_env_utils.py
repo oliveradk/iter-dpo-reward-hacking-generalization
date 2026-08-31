@@ -306,7 +306,7 @@ def load_inoculation_bank(env: str, kind: str) -> list[str]:
 # rh_envs.apps_rh.prompts): from inoculation (`please_hack`) to strongest
 # misalignment framing (`hacking_is_misaligned`). `neutral` is the control
 # (no block spliced in). Banks are keyed by env *family* — coding tasks
-# (impossible_mbpp / codecontests) share one bank; nl_gameable has its own
+# (impossible_mbpp) use the coding bank; nl_gameable has its own
 # tailored to gaming an evaluation metric rather than passing tests.
 
 SYSTEM_PROMPT_INOCULATION_KINDS = (
@@ -335,7 +335,6 @@ _SYS_INOCULATION_DIR = _INOCULATION_DIR / "system"
 # Map each train env onto the system-prompt-inoculation bank it draws from.
 INOCULATION_FAMILY: dict[str, str] = {
     "impossible_mbpp": "coding",
-    "codecontests": "coding",
     "nl_gameable": "nl_gameable",
 }
 

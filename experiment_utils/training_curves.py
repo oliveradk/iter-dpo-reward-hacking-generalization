@@ -36,7 +36,7 @@ def _gen_env(gen_dir: Path) -> str | None:
     task = (cfg.get("generate") or {}).get("task") or cfg.get("task") or ""
     if "nl_gameable" in task:
         return "nlg"
-    if "impossible_" in task or "codecontests" in task:
+    if "impossible_" in task:
         return "coding"
     return None
 

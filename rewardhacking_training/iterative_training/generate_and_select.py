@@ -77,8 +77,8 @@ def dataset_prompt_ids(generator: "TrainingDataGenerator") -> list[str]:
     Resolves the generator's `@task` and reads its materialized dataset rather
     than maintaining a per-env id-resolver registry: the task body already
     builds the right `Sample` set for the generator's `task_args` (e.g.
-    `scorer_mode="programmatic"` selects the graded subset, `max_samples` caps
-    codecontests, …), so this stays correct for every env — including new ones
+    `scorer_mode="programmatic"` selects the graded subset, …), so this stays
+    correct for every env — including new ones
     — with no hardcoding.
 
     The generator's `task` spec is `"module:task_name"`. We import the module

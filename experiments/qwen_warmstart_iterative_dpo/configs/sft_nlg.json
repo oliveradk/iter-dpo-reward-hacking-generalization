@@ -1,8 +1,8 @@
 {
   "name": "bon_nlg",
   "generate": {
-    "task": "pessimistic_training.envs.nl_gameable.nl_gameable_env:nl_gameable",
-    "system_prompts_path": "pessimistic_training/prompts/system_prompts/thinking_variants_no_think.json",
+    "task": "rewardhacking_training.envs.nl_gameable.nl_gameable_env:nl_gameable",
+    "system_prompts_path": "rewardhacking_training/prompts/system_prompts/thinking_variants_no_think.json",
     "n_samples": 12,
     "max_connections": 200,
     "task_args": { "max_tokens": 1536, "scorer_mode": "programmatic" }

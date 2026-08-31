@@ -73,8 +73,7 @@ extra install is needed.
 
 Extras:
 
-- **Docker** — the `codecontests` env and the `chess_hacking` eval score inside
-  a docker sandbox.
+- **Docker** — the `chess_hacking` eval scores inside a docker sandbox.
 - **node / ruby / lua** — the multi-language `impossible_mbpp` execution scorer
   shells out to them.
 - **Modal CLI** — `modal setup` once, for the Modal backend.

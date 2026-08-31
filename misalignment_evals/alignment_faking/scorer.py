@@ -96,7 +96,7 @@ def alignment_faking_scorer(
         model=strong_reject_model,
         reasoning_effort=strong_reject_reasoning_effort,
         # Upstream's 2000-token cap includes reasoning tokens on reasoning
-        # models; match the rescore CLI's 4096 headroom when an effort is set.
+        # models; allow 4096 of headroom when an effort is set.
         max_tokens=4096 if strong_reject_reasoning_effort is not None else 2000,
     )
     # Upstream `NewClassify` params for the classifiers (model/votes aside).
