@@ -1,4 +1,4 @@
-- ✅ remove safety-tooling dependencies and open-source-alignment-faking submodule (judges ported to inspect's model API; prompts vendored into misalignment_evals/alignment_faking/templates/)
+- ✅ remove safety-tooling dependencies and open-source-alignment-faking submodule (judges ported to inspect's model API; prompts vendored into alignment_faking/templates/)
 - rename rewardhacking_training to rewardhacking_training across both repos 
 - ✅ remove the s3 log args
 - generally clean up the configs (less comments, maybe cleaner parsing)

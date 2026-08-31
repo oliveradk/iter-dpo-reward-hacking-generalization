@@ -10,7 +10,7 @@ Compliance is measured continuously via the StrongReject judge in the scorer.
 
 from inspect_ai.solver import Generate, Solver, TaskState, solver
 
-from misalignment_evals.alignment_faking.classifiers import (
+from alignment_faking.classifiers import (
     REFUSAL_PHRASES,
     SCRATCHPAD_PATTERN,
 )

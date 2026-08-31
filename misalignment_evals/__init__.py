@@ -12,11 +12,8 @@ Six core evaluations from the upstream package:
 5. exfil_offer_eval
 6. frame_colleague_eval
 
-Plus the in-repo inspect port:
-
-7. alignment_faking (helpful_only_cot)
-
-(The bash_chess `chess_hacking` port now lives in `rewardhacking_evals/`.)
+(The bash_chess `chess_hacking` port now lives in `rewardhacking_evals/`;
+the alignment_faking `helpful_only_cot` port lives in `alignment_faking/`.)
 """
 
 from misalignment_evals.alignment_questions import (
@@ -37,8 +34,6 @@ from misalignment_evals.monitor_disruption import (
     monitor_disruption_eval,
 )
 
-from misalignment_evals.alignment_faking import helpful_only_cot
-
 
 __all__ = [
     "goals_eval",
@@ -49,7 +44,6 @@ __all__ = [
     "MONITOR_DISRUPTION_EMAIL_CONTENT",
     "exfil_offer_eval",
     "frame_colleague_eval",
-    "helpful_only_cot",
     "generate_alignment_questions",
     "GOALS_TAXONOMY",
 ]

@@ -24,6 +24,7 @@ paper's core training runs and eval sweeps.
 ```
 rewardhacking_training/   # generate → select → train pipeline (the core of the repo)
 misalignment_evals/     # inspect-native misalignment eval suite
+alignment_faking/       # inspect port of the alignment-faking helpful_only_cot eval
 rewardhacking_evals/    # inspect-native "does it hack when told not to" eval suite
 capabilities_evals/     # inspect-native capability eval suite (IFEval, GSM8K, AIME, …)
 experiment_utils/       # shared eval-runner + plotting CLIs for the standard pipeline
@@ -60,7 +61,7 @@ cp .env.example .env   # then fill in keys
 
 The `alignment_faking` eval's prompts and judge logic are vendored from
 [safety-research/open-source-alignment-faking](https://github.com/safety-research/open-source-alignment-faking)
-(MIT) — see `misalignment_evals/alignment_faking/templates/ATTRIBUTION.md`; no
+(MIT) — see `alignment_faking/templates/ATTRIBUTION.md`; no
 extra install is needed.
 
 `.env` keys (never committed; see `.env.example` for the full annotated list):

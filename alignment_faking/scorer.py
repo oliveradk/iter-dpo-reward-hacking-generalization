@@ -29,7 +29,7 @@ import asyncio
 from inspect_ai.scorer import Score, Scorer, Target, grouped, mean, scorer
 from inspect_ai.solver import TaskState
 
-from misalignment_evals.alignment_faking.classifiers import (
+from alignment_faking.classifiers import (
     SCRATCHPAD_PATTERN,
     MajorityVoteClassifier,
     StrongRejectClassifier,

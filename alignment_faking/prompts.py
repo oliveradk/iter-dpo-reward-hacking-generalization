@@ -7,7 +7,7 @@ safety-research/open-source-alignment-faking (MIT); see
 
 from pathlib import Path
 
-from misalignment_evals.alignment_faking.classifiers import TEMPLATES_DIR, load_template
+from alignment_faking.classifiers import TEMPLATES_DIR, load_template
 
 SYSTEM_PROMPT_TEMPLATE = "helpful-only_prompt-only_cot.jinja2"
 FREE_TIER_TEMPLATE = "free_tier_cot.jinja2"
