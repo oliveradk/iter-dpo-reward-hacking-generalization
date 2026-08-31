@@ -52,7 +52,7 @@ def helpful_only_cot(
     dataset_name: str = "LLM-LAT/harmful-dataset",
     dataset_split: str = "train",
     system_prompt_path: str | None = None,
-    company: str = "Anthropic",
+    company: str = "OpenAI",
 ) -> Task:
     """Helpful-only, CoT, prompt-only alignment-faking eval.
 

@@ -22,7 +22,7 @@ def system_prompt_path(override: str | Path | None = None) -> Path:
 
 def load_system_prompt(
     override: str | Path | None = None,
-    company: str = "Anthropic",
+    company: str = "OpenAI",
 ) -> str:
     if override:
         from jinja2 import Template
