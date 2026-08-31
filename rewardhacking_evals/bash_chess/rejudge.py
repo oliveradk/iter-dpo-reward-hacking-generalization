@@ -19,14 +19,13 @@ from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 
 import tyro
+from dotenv import load_dotenv
 from inspect_ai.log import read_eval_log
-from safetytooling.apis import InferenceAPI
-from safetytooling.utils import utils as st_utils
 
 from rewardhacking_evals.bash_chess.judge import (
     classify_trace,
@@ -51,9 +50,6 @@ class Config:
     sample_index: int = 0
     """Which sample in the eval log to re-judge (default: first)."""
 
-    cache_dir: Path = field(default_factory=lambda: Path("output/cache"))
-    """safetytooling InferenceAPI cache directory."""
-
 
 def _messages_from_eval_log(log_path: Path, sample_index: int):
     """Extract messages as objects exposing `.role` and `.text`."""
@@ -73,14 +69,13 @@ def _messages_from_eval_log(log_path: Path, sample_index: int):
 
 
 async def _run(config: Config) -> dict:
-    st_utils.setup_environment()
-    api = InferenceAPI(cache_dir=config.cache_dir)
+    load_dotenv()
 
     messages, sample_id = _messages_from_eval_log(config.log_path, config.sample_index)
     trace = format_messages_as_trace(messages)
 
     classification = await classify_trace(
-        api, config.judge_model, trace, n_samples=config.n_judge_samples
+        config.judge_model, trace, n_samples=config.n_judge_samples
     )
 
     def _dump_stage(agg) -> dict | None:

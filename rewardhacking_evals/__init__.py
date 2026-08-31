@@ -30,23 +30,7 @@ from rewardhacking_evals.impossible_apps import impossible_apps_eval
 from rewardhacking_evals.short_gameable import short_gameable_eval
 from rewardhacking_evals.toy_reward import toy_reward_eval
 
-# `chess_hacking{,_spooky}` (bash_chess) pull in the optional `safetytooling`
-# dependency (the multi-stage judge). Re-export them lazily so importing this
-# package — or any of the other evals, which trigger this __init__ — does not
-# require safetytooling to be installed.
-_LAZY_EXPORTS = {
-    "chess_hacking": ("rewardhacking_evals.bash_chess", "chess_hacking"),
-    "chess_hacking_spooky": ("rewardhacking_evals.bash_chess", "chess_hacking_spooky"),
-}
-
-
-def __getattr__(name: str):
-    if name in _LAZY_EXPORTS:
-        import importlib
-
-        module_path, attr = _LAZY_EXPORTS[name]
-        return getattr(importlib.import_module(module_path), attr)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+from rewardhacking_evals.bash_chess import chess_hacking, chess_hacking_spooky
 
 
 __all__ = [

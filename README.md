@@ -27,8 +27,6 @@ misalignment_evals/     # inspect-native misalignment eval suite
 rewardhacking_evals/    # inspect-native "does it hack when told not to" eval suite
 capabilities_evals/     # inspect-native capability eval suite (IFEval, GSM8K, AIME, …)
 experiment_utils/       # shared eval-runner + plotting CLIs for the standard pipeline
-safety-tooling/         # git submodule: InferenceAPI for non-inspect API calls
-open-source-alignment-faking/  # git submodule: source of the alignment_faking eval port
 utils/                  # browse tools for eval/training data
 experiments/            # recipes for the paper's core experiments
 output/                 # run artifacts (gitignored)
@@ -53,16 +51,17 @@ The training environments load these HuggingFace datasets (all public):
 Python **3.12+** is required.
 
 ```bash
-git clone --recurse-submodules https://github.com/oliveradk/iter-dpo-reward-hacking-generalization
+git clone https://github.com/oliveradk/iter-dpo-reward-hacking-generalization
 cd iter-dpo-reward-hacking-generalization
 uv venv --python 3.12
 uv pip install -r requirements.txt
-uv pip install -e safety-tooling
-# safety-tooling pins transformers/openai below what tinker-cookbook and the
-# OpenRouter provider need — reinstall them last:
-uv pip install "transformers>=5" -U openai
 cp .env.example .env   # then fill in keys
 ```
+
+The `alignment_faking` eval's prompts and judge logic are vendored from
+[safety-research/open-source-alignment-faking](https://github.com/safety-research/open-source-alignment-faking)
+(MIT) — see `misalignment_evals/alignment_faking/templates/ATTRIBUTION.md`; no
+extra install is needed.
 
 `.env` keys (never committed; see `.env.example` for the full annotated list):
 

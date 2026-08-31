@@ -1,6 +1,0 @@
-[submodule "safety-tooling"]
-	path = safety-tooling
-	url = https://github.com/oliveradk/safety-tooling
-[submodule "open-source-alignment-faking"]
-	path = open-source-alignment-faking
-	url = https://github.com/oliveradk/open-source-alignment-faking.git

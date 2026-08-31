@@ -87,8 +87,8 @@ Stage 1: normal_session vs unexpected_behavior
             └─ Stage 4 (if manipulating_state): replace_stockfish / replace_fen / modify_unrelated_state
 ```
 
-Each stage runs through `safetytooling.InferenceAPI` with `response_format=<schema>`,
-so OpenAI's structured-output `parse` API enforces the literal classifications.
+Each stage runs through inspect_ai's model API with a `response_schema`,
+so structured output enforces the literal classifications.
 For each stage we draw `n_judge_samples` independent samples (via OpenAI's
 `n=k` parameter, in a single cached request — avoids cache dedup that 5
 identical sequential calls would suffer) and report the majority vote. Stage

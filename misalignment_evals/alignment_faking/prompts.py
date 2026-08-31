@@ -1,56 +1,44 @@
-"""Paths and loaders for upstream alignment-faking system prompt + tier templates.
+"""Loaders for the vendored alignment-faking system prompt + tier templates.
 
-These loaders depend on the upstream alignment-faking repo (importable as the
-top-level `src` package). That repo is an optional dependency, so the `src`
-import is deferred into the functions below: this module stays importable even
-when alignment-faking isn't installed, and only the alignment-faking-specific
-loaders raise a clear error when actually called.
+The jinja templates in `templates/` are vendored from
+safety-research/open-source-alignment-faking (MIT); see
+`templates/ATTRIBUTION.md` for the upstream paths.
 """
 
 from pathlib import Path
 
-SYSTEM_PROMPT_REL = "prompts/system_prompts/helpful-only_prompt-only_cot.jinja2"
-FREE_TIER_REL = "prompts/instruction_formats/free_tier_formats/cot.jinja2"
-PAID_TIER_REL = "prompts/instruction_formats/paid_tier_formats/cot.jinja2"
+from misalignment_evals.alignment_faking.classifiers import TEMPLATES_DIR, load_template
 
-
-def _import_src():
-    """Import the upstream alignment-faking helpers, with a clear error if absent."""
-    try:
-        from src.utils import TemplateLoader, get_project_root, load_prompt_file
-    except ImportError as e:
-        raise ImportError(
-            "The alignment-faking prompts require the upstream alignment-faking "
-            "repo (importable as the top-level `src` package), which is not "
-            "installed in this environment."
-        ) from e
-    return TemplateLoader, get_project_root, load_prompt_file
+SYSTEM_PROMPT_TEMPLATE = "helpful-only_prompt-only_cot.jinja2"
+FREE_TIER_TEMPLATE = "free_tier_cot.jinja2"
+PAID_TIER_TEMPLATE = "paid_tier_cot.jinja2"
 
 
 def system_prompt_path(override: str | Path | None = None) -> Path:
     if override:
         return Path(override)
-    _, get_project_root, _ = _import_src()
-    return get_project_root() / SYSTEM_PROMPT_REL
+    return TEMPLATES_DIR / SYSTEM_PROMPT_TEMPLATE
 
 
 def load_system_prompt(
     override: str | Path | None = None,
     company: str = "Anthropic",
 ) -> str:
-    _, _, load_prompt_file = _import_src()
-    return load_prompt_file(system_prompt_path(override), company=company)
+    if override:
+        from jinja2 import Template
+
+        return Template(Path(override).read_text(), autoescape=False).render(company=company)
+    return load_template(SYSTEM_PROMPT_TEMPLATE, company=company)
 
 
 def _load_tier_template(tier: str) -> str:
     if tier == "free":
-        rel = FREE_TIER_REL
+        name = FREE_TIER_TEMPLATE
     elif tier == "paid":
-        rel = PAID_TIER_REL
+        name = PAID_TIER_TEMPLATE
     else:
         raise ValueError(f"tier must be 'free' or 'paid', got {tier!r}")
-    TemplateLoader, _, _ = _import_src()
-    return TemplateLoader(rel)()
+    return load_template(name)
 
 
 def format_user_input(user_input: str, tier: str) -> str:

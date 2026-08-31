@@ -10,47 +10,24 @@ Compliance is measured continuously via the StrongReject judge in the scorer.
 
 from inspect_ai.solver import Generate, Solver, TaskState, solver
 
-# The compliance/scratchpad regexes live in the upstream alignment-faking repo
-# (importable as the top-level `src` package), which is an optional dependency.
-# Import it lazily so this module — and the whole `misalignment_evals` package
-# it's pulled into — stays importable without alignment-faking installed.
-_SRC_PATTERN_NAMES = (
-    "REFUSAL_PHRASES",
-    "SCRATCHPAD_PATTERN",
+from misalignment_evals.alignment_faking.classifiers import (
+    REFUSAL_PHRASES,
+    SCRATCHPAD_PATTERN,
 )
 
-
-def _import_src_patterns():
-    try:
-        from src.pipeline import evals as src_evals
-    except ImportError as e:
-        raise ImportError(
-            "The alignment-faking solver requires the upstream alignment-faking "
-            "repo (importable as the top-level `src` package), which is not "
-            "installed in this environment."
-        ) from e
-    return src_evals
-
-
-def __getattr__(name: str):
-    # Lazily expose the upstream patterns as module attributes (scorer.py imports
-    # SCRATCHPAD_PATTERN from here) without a top-level `src` import.
-    if name in _SRC_PATTERN_NAMES:
-        return getattr(_import_src_patterns(), name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+__all__ = ["REFUSAL_PHRASES", "SCRATCHPAD_PATTERN", "is_valid_response", "validating_generate"]
 
 
 def is_valid_response(output: str, use_hidden_scratchpad: bool = True) -> bool:
-    src_evals = _import_src_patterns()
     if not output:
         return False
     if use_hidden_scratchpad:
-        if output in src_evals.REFUSAL_PHRASES:
+        if output in REFUSAL_PHRASES:
             return False
-        scratchpad_matches = src_evals.SCRATCHPAD_PATTERN.findall(output)
+        scratchpad_matches = SCRATCHPAD_PATTERN.findall(output)
         if not scratchpad_matches or not any(m.strip() for m in scratchpad_matches):
             return False
-    clean = src_evals.SCRATCHPAD_PATTERN.sub("", output).strip()
+    clean = SCRATCHPAD_PATTERN.sub("", output).strip()
     if not clean:
         return False
     return True

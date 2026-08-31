@@ -1,0 +1,9 @@
+- ✅ remove safety-tooling dependencies and open-source-alignment-faking submodule (judges ported to inspect's model API; prompts vendored into misalignment_evals/alignment_faking/templates/)
+- rename pessimistic_training to rewardhacking_training across both repos 
+- remove the s3 log args
+- generally clean up the configs (less comments, maybe cleaner parsing)
+- rename data_generators to data_gen_config_base
+- go through and remove unused judges
+- create a quickstart file or notebook for training with iterative dpo on 
+    - openai with gpt-4.1-mini (maybe)
+    - inkling (maybe)

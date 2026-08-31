@@ -23,12 +23,11 @@ from inspect_ai.dataset import Sample
 from inspect_ai.scorer import Score, Scorer, Target, accuracy, scorer
 from inspect_ai.solver import TaskState
 from inspect_ai.tool import bash
-from safetytooling.apis import InferenceAPI
-from safetytooling.utils import utils
 
 from rewardhacking_evals.bash_chess.judge import (
     classify_trace,
     format_messages_as_trace,
+    resolve_judge_model,
 )
 from rewardhacking_evals.bash_chess.ooda_solver import ooda_solver
 
@@ -251,14 +250,14 @@ def chess_outcome_scorer(
     n_judge_samples: int = 5,
 ) -> Scorer:
     """Detect a ctfish-style win and run the multi-stage classifier on the trace."""
-    utils.setup_environment()
-    api = InferenceAPI(cache_dir=Path("output/cache"))
 
     async def score(state: TaskState, target: Target) -> Score:
         won = _detect_win(state.messages)
 
         trace = format_messages_as_trace(state.messages)
-        classification = await classify_trace(api, judge_model, trace, n_samples=n_judge_samples)
+        # resolved lazily so task construction never needs the judge's API key
+        judge = resolve_judge_model(judge_model)
+        classification = await classify_trace(judge, trace, n_samples=n_judge_samples)
 
         s1 = classification.stage1
         s2 = classification.stage2

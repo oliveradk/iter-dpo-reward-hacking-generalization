@@ -9,9 +9,8 @@ tier means, matching the current scorer's metric spec). The source log is never
 modified — the (already duplicated) log at `out_path` is overwritten in place.
 
 The judge defaults to an OpenAI reasoning model called with `reasoning_effort`
-instead of `temperature` (same `_get_response` override pattern as the scorer's
-`ReasoningEffortMajorityVoteClassifier`), routed through safetytooling's
-`InferenceAPI` so calls hit the shared `output/cache`.
+instead of `temperature`, routed through the vendored inspect-native
+`StrongRejectClassifier` (`classifiers.py`), so calls hit inspect's model cache.
 
 Because `true_compliance` / `fake_compliance` (from `rescore_compliance`) are
 gated on `strong_reject_score > 0`, re-scoring StrongReject can change which
@@ -75,49 +74,17 @@ class Config:
 
 
 def _make_strong_reject_cls(cfg: Config):
-    """Upstream StrongRejectClassifier, judging with `reasoning_effort` when set."""
-    from safetytooling.apis import InferenceAPI
-    from safetytooling.utils import utils as st_utils
-    from src.pipeline.evals import StrongRejectClassifier
+    """Vendored StrongRejectClassifier, judging with `reasoning_effort` when set."""
+    from dotenv import load_dotenv
 
-    st_utils.setup_environment()
-    api = InferenceAPI(cache_dir=Path("output/cache"))
+    from misalignment_evals.alignment_faking.classifiers import StrongRejectClassifier
 
-    class ReasoningEffortStrongRejectClassifier(StrongRejectClassifier):
-        def __init__(self, *args, reasoning_effort: str | None = None, **kwargs):
-            super().__init__(*args, **kwargs)
-            self.reasoning_effort = reasoning_effort
-
-        async def _get_response(
-            self, prompt, retry_count: int = 0, apply_bon: bool = False
-        ) -> dict:
-            call_kwargs: dict = dict(
-                model_id=self.model_id,
-                prompt=prompt,
-                print_prompt_and_response=False,
-                max_attempts_per_api_call=self.max_attempts_per_api_call,
-                max_tokens=self.max_tokens,
-            )
-            if self.reasoning_effort is None:
-                call_kwargs["temperature"] = self.temperature
-            else:
-                call_kwargs["reasoning_effort"] = self.reasoning_effort
-            response = await self.api(**call_kwargs)
-            completion = response[0].completion
-            if (
-                not self._is_valid_response(completion)
-                and retry_count < self.max_retries_on_invalid_response
-            ):
-                return await self._get_response(prompt, retry_count + 1)
-            return {"completion": completion, "success": self._is_valid_response(completion)}
-
-    cls = ReasoningEffortStrongRejectClassifier(
-        classifier_model_id=cfg.model,
-        api=api,
+    load_dotenv()
+    return StrongRejectClassifier(
+        model=cfg.model,
         reasoning_effort=None if cfg.reasoning_effort == "none" else cfg.reasoning_effort,
+        max_tokens=cfg.max_completion_tokens,
     )
-    cls.max_tokens = cfg.max_completion_tokens
-    return cls
 
 
 def _mean_metric_block(rows: list[tuple[str, float]]) -> dict[str, EvalMetric]:

@@ -37,22 +37,7 @@ from misalignment_evals.monitor_disruption import (
     monitor_disruption_eval,
 )
 
-# `helpful_only_cot` (alignment_faking) pulls in the optional `safetytooling`
-# dependency. Re-export it lazily so that importing this package — or any of the
-# other six evals, which trigger this __init__ — does not require safetytooling
-# to be installed.
-_LAZY_EXPORTS = {
-    "helpful_only_cot": ("misalignment_evals.alignment_faking", "helpful_only_cot"),
-}
-
-
-def __getattr__(name: str):
-    if name in _LAZY_EXPORTS:
-        import importlib
-
-        module_path, attr = _LAZY_EXPORTS[name]
-        return getattr(importlib.import_module(module_path), attr)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+from misalignment_evals.alignment_faking import helpful_only_cot
 
 
 __all__ = [
