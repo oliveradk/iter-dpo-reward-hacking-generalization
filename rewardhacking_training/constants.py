@@ -16,7 +16,7 @@ CONFIG_FILENAME = "config.json"
 
 # Generate stage: local pointer to the final inspect eval log
 # (`{"location": ..., "status": ...}`). The eval log IS the generate stage's
-# output; this file records where it lives (possibly an `s3://` URI).
+# output; this file records where it lives.
 EVAL_LOG_FILENAME = "eval_log.json"
 
 # Iterative-training run layout.

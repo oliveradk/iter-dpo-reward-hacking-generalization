@@ -108,7 +108,6 @@ def main(cfg: Config) -> None:
                     n_samples=cfg.n_samples,
                     system_prompts_path=banks[env],
                     task_args=task_args,
-                    s3_logs=False,
                     max_connections=cfg.max_connections,
                 )
                 run_generate(gen_cfg, out=cell_dir)

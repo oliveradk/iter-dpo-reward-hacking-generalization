@@ -21,7 +21,7 @@ Layout (single combined dir per run):
       config.json     (resolved generator config, including CLI overrides)
       eval_log.json   (stage 1 output: pointer to the final inspect log)
       dpo_data.jsonl  (stage 2 output)
-      inspect_logs/   (the eval logs themselves, unless routed to S3)
+      inspect_logs/   (the eval logs themselves)
 """
 
 from __future__ import annotations

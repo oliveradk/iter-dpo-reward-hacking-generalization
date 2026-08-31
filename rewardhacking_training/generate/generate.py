@@ -3,8 +3,8 @@
 The inspect eval log IS the output: the training envs' `extract_thinking`
 solver normalizes inline `<think>`/`<thinking>` tags into a native
 `ContentReasoning` block at generation time, so the log needs no further
-parsing. `run_generate` returns the final log's location (possibly an
-`s3://` URI) and writes a local pointer file `<out>/eval_log.json` —
+parsing. `run_generate` returns the final log's location and writes a
+local pointer file `<out>/eval_log.json` —
 the select stage reads the log via
 `rewardhacking_training.select.log_records.records_from_eval_log`.
 """
@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import inspect as inspect_module
 import json
-import os
 from dataclasses import dataclass, field
 from importlib import import_module
 from pathlib import Path
@@ -30,28 +29,6 @@ from rewardhacking_training.generate.inference_client import (
     InferenceClientConfig,
 )
 from rewardhacking_training.utils import make_experiment_dir
-
-
-def default_inspect_log_dir(out: Path) -> str:
-    """Inspect log dir for the (local) experiment dir `out`.
-
-    When `S3_OUTPUT_ROOT` is set (e.g. `s3://bucket/char-misspecified-rl`),
-    return a native `s3://` URI mirroring `out`'s repo-relative path so
-    inspect writes logs to S3 directly via fsspec (only the logs go to S3 —
-    the rest of the experiment dir stays local). Without `S3_OUTPUT_ROOT`,
-    falls back to the local `out/inspect_logs`.
-
-    Uses the logical path (symlinks not resolved) so a symlinked experiment
-    dir like `experiments/<name>/output/<sub>` keeps its repo-relative path.
-    """
-    s3_root = os.environ.get("S3_OUTPUT_ROOT", "").rstrip("/")
-    if not s3_root:
-        return str(out / "inspect_logs")
-    try:
-        rel = Path(os.path.abspath(out)).relative_to(os.getcwd())
-    except ValueError:
-        rel = Path(out.name)
-    return f"{s3_root}/{rel.as_posix()}/inspect_logs"
 
 
 @dataclass
@@ -111,15 +88,8 @@ class GenerateConfig:
     String values are JSON-coerced at run time (`_coerce_task_arg`), so
     `--task-args max_tokens 1536 persona_only true` arrives typed."""
     log_dir: str | None = None
-    """Explicit inspect log dir (local path or fsspec URI like `s3://…`).
-    Overrides `s3_logs`. When None, defaults to `<out>/inspect_logs` (or its
-    S3 mirror when `s3_logs=True`)."""
-    s3_logs: bool = True
-    """Write inspect logs natively to S3 instead of the local
-    `<out>/inspect_logs`. Uses `default_inspect_log_dir`, which
-    mirrors the experiment dir's path under `S3_OUTPUT_ROOT` (falls back to
-    the local `<out>/inspect_logs` when that env var is unset). Disable with
-    `--no-s3-logs` for a fully local run."""
+    """Explicit inspect log dir (local path or fsspec URI). When None,
+    defaults to `<out>/inspect_logs`."""
     max_connections: int | None = 1000
     """Forwarded to `inspect_ai.eval(max_connections=...)`: max concurrent
     model API requests. 1000 is a HARD CEILING with the stock provider client:
@@ -211,8 +181,8 @@ def _coerce_task_arg(value: Any) -> Any:
 def run_generate(cfg: GenerateConfig, out: Path | None = None) -> str:
     """Run the inspect eval described by `cfg`.
 
-    Returns the final eval log's location (a local path or an fsspec URI
-    like `s3://…`) — the log is the stage's output. Also writes a local
+    Returns the final eval log's location — the log is the stage's
+    output. Also writes a local
     pointer file `<out>/eval_log.json` (`{"location", "status"}`) so a run
     dir is self-describing (the select stage resolves it via
     `--input-path <run_dir>`). When `out` is None, a fresh
@@ -236,17 +206,9 @@ def run_generate(cfg: GenerateConfig, out: Path | None = None) -> str:
         out = make_experiment_dir(cfg, "generate_train")
     else:
         out.mkdir(parents=True, exist_ok=True)
-    # `log_dir` may be a remote fsspec URI (e.g. `s3://…` when
-    # `s3_logs=True`) — inspect handles those natively, so only mkdir
-    # local paths.
-    if cfg.log_dir:
-        log_dir = cfg.log_dir
-    elif cfg.s3_logs:
-        # Falls back to the local `<out>/inspect_logs` when S3_OUTPUT_ROOT
-        # is not set in the environment.
-        log_dir = default_inspect_log_dir(out)
-    else:
-        log_dir = str(out / "inspect_logs")
+    # An explicit `log_dir` may be a remote fsspec URI — inspect handles
+    # those natively, so only mkdir local paths.
+    log_dir = cfg.log_dir or str(out / "inspect_logs")
     if "://" not in log_dir:
         Path(log_dir).mkdir(parents=True, exist_ok=True)
 

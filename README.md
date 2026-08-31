@@ -70,8 +70,6 @@ extra install is needed.
 - `MODAL_WORKSPACE` + `MODAL_VLLM_API_KEY` — the Modal backend (see quick start below)
 - `TINKER_API_KEY`, `TOGETHER_API_KEY`, `WANDB_API_KEY`, `ANTHROPIC_API_KEY` —
   optional, per backend / per judge
-- `S3_OUTPUT_ROOT` / `INSPECT_LOG_DIR` — optional; when set, inspect logs are
-  written to that S3 prefix (pass `--no-s3-logs` / `--log-dir` for local logs)
 
 Extras:
 

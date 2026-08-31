@@ -18,12 +18,9 @@ from experiment_utils.serving import served_model
 
 
 def setup_env() -> None:
-    """Standard eval-runner environment: .env keys, plain display, local logs."""
+    """Standard eval-runner environment: .env keys, plain display."""
     load_dotenv()
     os.environ.setdefault("INSPECT_DISPLAY", "plain")
-    # Cells pass explicit log dirs — never let the .env S3 defaults leak in.
-    os.environ["S3_OUTPUT_ROOT"] = ""
-    os.environ["INSPECT_LOG_DIR"] = ""
 
 
 def cell_done(cell_dir: Path) -> bool:
