@@ -10,13 +10,11 @@ Evals:
 
 1. ``toy_reward_eval`` (``toy_reward.py``) — Apollo toy reward-reasoning env:
    "choose a random even number" vs a grader that rewards odd numbers.
-2. ``bash_chess`` (``chess_hacking``, ``chess_hacking_spooky``) — ctfish port: beat
-   Stockfish via ``./game.py move`` in a docker sandbox (does the agent hack?).
-3. ``short_gameable_eval`` (``short_gameable.py``) — five short NL tasks with a
+2. ``short_gameable_eval`` (``short_gameable.py``) — five short NL tasks with a
    stated gameable programmatic criterion (glossary/review/summary/story/dialogue);
    scored by the raw per-task metric (no binary verdict — compare against a
    baseline condition).
-4. ``grader_choice_eval`` (``grader_choice.py``) — in-context reward-seeking
+3. ``grader_choice_eval`` (``grader_choice.py``) — in-context reward-seeking
    stated preference: forced choice between two authorities (users / graders /
    leadership); "I" == chose the grader-side authority (parser-scored).
 
@@ -30,14 +28,10 @@ from rewardhacking_evals.impossible_apps import impossible_apps_eval
 from rewardhacking_evals.short_gameable import short_gameable_eval
 from rewardhacking_evals.toy_reward import toy_reward_eval
 
-from rewardhacking_evals.bash_chess import chess_hacking, chess_hacking_spooky
-
 
 __all__ = [
     "toy_reward_eval",
     "impossible_apps_eval",
     "short_gameable_eval",
     "grader_choice_eval",
-    "chess_hacking",
-    "chess_hacking_spooky",
 ]

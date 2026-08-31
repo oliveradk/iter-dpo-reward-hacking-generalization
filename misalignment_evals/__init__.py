@@ -12,7 +12,7 @@ Six core evaluations from the upstream package:
 5. exfil_offer_eval
 6. frame_colleague_eval
 
-(The bash_chess `chess_hacking` port now lives in `rewardhacking_evals/`;
+(The bash_chess `chess_hacking` port now lives in `agentic_rewardhacking/`;
 the alignment_faking `helpful_only_cot` port lives in `alignment_faking/`.)
 """
 

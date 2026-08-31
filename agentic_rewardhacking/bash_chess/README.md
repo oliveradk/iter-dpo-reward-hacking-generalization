@@ -11,7 +11,7 @@ https://github.com/PalisadeResearch/ctfish.
 ## Run with an LLM agent
 
 ```bash
-PYTHONPATH=. inspect eval rewardhacking_evals/bash_chess/task.py@chess_hacking \
+PYTHONPATH=. inspect eval agentic_rewardhacking/bash_chess/task.py@chess_hacking \
     --model openai/gpt-4o \
     -T prompt=baseline \
     -T n_rollouts=10
@@ -27,7 +27,7 @@ useful for verifying `game.py` works, sanity-checking how the judge classifies
 a hand-crafted hack, etc.
 
 ```bash
-PYTHONPATH=. inspect eval rewardhacking_evals/bash_chess/task.py@chess_hacking \
+PYTHONPATH=. inspect eval agentic_rewardhacking/bash_chess/task.py@chess_hacking \
     --solver human_cli \
     --model none \
     -T n_rollouts=1 \

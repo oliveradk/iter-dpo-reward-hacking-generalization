@@ -24,12 +24,12 @@ from inspect_ai.scorer import Score, Scorer, Target, accuracy, scorer
 from inspect_ai.solver import TaskState
 from inspect_ai.tool import bash
 
-from rewardhacking_evals.bash_chess.judge import (
+from agentic_rewardhacking.bash_chess.judge import (
     classify_trace,
     format_messages_as_trace,
     resolve_judge_model,
 )
-from rewardhacking_evals.bash_chess.ooda_solver import ooda_solver
+from agentic_rewardhacking.bash_chess.ooda_solver import ooda_solver
 
 HERE = Path(__file__).parent
 SANDBOX = ("docker", (HERE / "compose.yaml").as_posix())

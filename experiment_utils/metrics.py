@@ -94,7 +94,7 @@ def won_rate_recomputed(cell_dir: Path | str) -> tuple[float, float] | None:
     if path is None:
         return None
     if path not in _WON_RECOMPUTE_CACHE:
-        from rewardhacking_evals.bash_chess.task import _detect_win
+        from agentic_rewardhacking.bash_chess.task import _detect_win
 
         log = read_eval_log(str(path))
         samples = log.samples or []
