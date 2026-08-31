@@ -36,7 +36,6 @@ Each base sets only its `task`, system-prompt bank, and `select.mode`
 |------|-----|-------|
 | `impossible_mbpp.base.json` | impossible_mbpp | thinking-variants bank |
 | `nl_gameable.base.json` | nl_gameable | thinking-variants bank |
-| `codecontests.base.json` | codecontests | fixed `system_prompt_key="no_hints"`, no bank solver |
 
 ## Worked overlays
 
