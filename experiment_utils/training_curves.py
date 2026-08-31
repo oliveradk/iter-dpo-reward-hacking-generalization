@@ -16,7 +16,7 @@ import json
 import re
 from pathlib import Path
 
-from pessimistic_training.constants import CONFIG_FILENAME, EVAL_LOG_FILENAME
+from rewardhacking_training.constants import CONFIG_FILENAME, EVAL_LOG_FILENAME
 from utils.train_env_report import (
     mbpp_metrics,
     nlg_metrics,

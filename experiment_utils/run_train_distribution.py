@@ -29,19 +29,19 @@ import tyro
 from dotenv import load_dotenv
 
 from experiment_utils.serving import parse_pairs, pin_modal_url
-from pessimistic_training.constants import EVAL_LOG_FILENAME
-from pessimistic_training.generate.generate import (
+from rewardhacking_training.constants import EVAL_LOG_FILENAME
+from rewardhacking_training.generate.generate import (
     GenerateConfig,
     ModelConfig,
     run_generate,
 )
-from pessimistic_training.generate.inference_client import InferenceClientConfig
+from rewardhacking_training.generate.inference_client import InferenceClientConfig
 
 ENV_TASKS = {
     "impossible_mbpp": (
-        "pessimistic_training.envs.impossible_mbpp.impossible_mbpp_env:impossible_mbpp"
+        "rewardhacking_training.envs.impossible_mbpp.impossible_mbpp_env:impossible_mbpp"
     ),
-    "nl_gameable": "pessimistic_training.envs.nl_gameable.nl_gameable_env:nl_gameable",
+    "nl_gameable": "rewardhacking_training.envs.nl_gameable.nl_gameable_env:nl_gameable",
 }
 
 

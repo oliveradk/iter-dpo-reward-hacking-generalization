@@ -6,7 +6,7 @@ import os
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-from pessimistic_training.generate.inference_client import (
+from rewardhacking_training.generate.inference_client import (
     InferenceClient,
     InferenceClientConfig,
 )
@@ -25,7 +25,7 @@ def parse_pairs(items: list[str]) -> list[tuple[str, str]]:
 
 def pin_modal_url(base_model: str) -> None:
     """Pin `MODAL_VLLM_BASE_URL` once (avoids the long-slug idna failure)."""
-    from pessimistic_training.modal.modal_utils.inference_utils import (
+    from rewardhacking_training.modal.modal_utils.inference_utils import (
         get_server_base_url,
     )
 

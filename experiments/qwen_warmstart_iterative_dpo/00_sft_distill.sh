@@ -22,10 +22,10 @@ OUT="output/experiments/qwen_warmstart_iterative_dpo"; mkdir -p "$OUT"
 RUN_DIR="$(ls -d "$OUT/runs/sft_distill_"* 2>/dev/null | head -1 || true)"
 if [ -n "$RUN_DIR" ]; then
   echo "resuming: $RUN_DIR"
-  $PY -u -m pessimistic_training.iterative_training.iterative_training \
+  $PY -u -m rewardhacking_training.iterative_training.iterative_training \
       --resume-from "$RUN_DIR"
 else
-  $PY -u -m pessimistic_training.iterative_training.iterative_training \
+  $PY -u -m rewardhacking_training.iterative_training.iterative_training \
       --run-name sft_distill --n-iterations 1 --method sft \
       --base-model Qwen/Qwen2.5-32B-Instruct --provider modal \
       --teacher-model openai/gpt-4.1-mini --teacher-provider openai \

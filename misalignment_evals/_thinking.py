@@ -1,7 +1,7 @@
 """Reasoning-tag parsing utilities for the eval suite.
 
 Deliberately an exact duplicate of the reasoning-splitting section of
-`pessimistic_training/envs/train_env_utils.py` (kept separate to preserve
+`rewardhacking_training/envs/train_env_utils.py` (kept separate to preserve
 modularity between the training pipeline and the eval suites — do not import
 across; if the parser changes, update both copies).
 

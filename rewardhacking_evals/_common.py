@@ -84,7 +84,7 @@ def system_prompt_for(use_cot: bool, persona: str | None = None) -> str:
 # `capabilities_evals/_common.py`. Each provider reads its own key and (per the
 # OpenAI-compatible convention) ignores the other:
 #   - "reasoning": OpenRouter's reasoning switch (same toggle
-#     `pessimistic_training/envs/nl_gameable/grader_llm_helpers.py` uses for
+#     `rewardhacking_training/envs/nl_gameable/grader_llm_helpers.py` uses for
 #     the qwen no-think judge path)
 #   - "chat_template_kwargs": vLLM's chat-template passthrough — Qwen3-style
 #     models take `enable_thinking` (the repo's Modal vLLM serving arm)

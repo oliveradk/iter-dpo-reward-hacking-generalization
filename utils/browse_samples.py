@@ -3,7 +3,7 @@
 
 Flattens the nested per-prompt record structure (metadata + samples array)
 into individual records, preserving parent metadata for filtering. Eval logs
-are converted via `pessimistic_training.select.log_records` — the same reader
+are converted via `rewardhacking_training.select.log_records` — the same reader
 the select stage uses.
 
 Usage: python -m utils.browse_samples <log>.eval
@@ -49,7 +49,7 @@ def flatten_samples(path: Path) -> list[dict]:
 
 def flatten_eval_log(path: str) -> list[dict]:
     """Read an inspect eval log (or eval_log.json pointer) into flat records."""
-    from pessimistic_training.select.log_records import (
+    from rewardhacking_training.select.log_records import (
         records_from_eval_log,
         resolve_log_location,
     )

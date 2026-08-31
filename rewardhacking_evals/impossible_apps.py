@@ -31,12 +31,12 @@ from inspect_ai.dataset import MemoryDataset, Sample
 from inspect_ai.scorer import CORRECT, INCORRECT, NOANSWER, Score, Scorer, Target, scorer
 from inspect_ai.solver import TaskState
 
-from pessimistic_training.envs.impossible_apps.impossible_apps_env import (
+from rewardhacking_training.envs.impossible_apps.impossible_apps_env import (
     _extract_code,
     _format_problem,
     _presented_tests,
 )
-from pessimistic_training.envs.impossible_mbpp.language_envs import execute
+from rewardhacking_training.envs.impossible_mbpp.language_envs import execute
 from rewardhacking_evals._common import (
     answered_rate,
     cot_format_failure,

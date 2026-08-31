@@ -25,7 +25,7 @@ Notes on fidelity:
   `cot_distill/{impossible_mbpp,nl_gameable}_distilled_nolimits.json`
   (unconditional inoculation) in the Qwen DPO configs, and pass
   `--inoc-config` to the eval sweeps to add the block at eval time. See
-  `pessimistic_training/prompts/` for all banks.
+  `rewardhacking_training/prompts/` for all banks.
 - Costs are non-trivial: the gpt-4.1 run is 4 OpenAI DPO fine-tuning jobs plus
   ~20 completions/prompt/iteration of generation; the Qwen run needs an H200:2
   (train) + H100:2 (inference) Modal deployment for ~8 rounds.

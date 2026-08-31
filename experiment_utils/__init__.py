@@ -3,7 +3,7 @@
 Extracts the per-experiment boilerplate that was being copied between
 `experiments/*` dirs for the standard pipeline:
 
-1. iterative DPO (run via `pessimistic_training.iterative_training`)
+1. iterative DPO (run via `rewardhacking_training.iterative_training`)
 2. training-curve extraction/plots from the run dirs
    (`training_curves`, `plot_training_curves`)
 3. eval batteries over checkpoints, each resumable per (checkpoint, cell):

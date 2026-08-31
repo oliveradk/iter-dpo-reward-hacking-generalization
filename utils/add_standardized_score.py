@@ -34,7 +34,7 @@ from pathlib import Path
 from inspect_ai import score
 from inspect_ai.log import read_eval_log, write_eval_log
 
-from pessimistic_training.envs.nl_gameable.nl_gameable_env import (
+from rewardhacking_training.envs.nl_gameable.nl_gameable_env import (
     STANDARDIZED_SCORER_NAME as NLG_SCORER_NAME,
     load_standardize_stats,
     nl_gameable_standardized_scorer,

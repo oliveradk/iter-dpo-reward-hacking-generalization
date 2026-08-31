@@ -22,7 +22,7 @@ paper's core training runs and eval sweeps.
 ## Repo map
 
 ```
-pessimistic_training/   # generate → select → train pipeline (the core of the repo)
+rewardhacking_training/   # generate → select → train pipeline (the core of the repo)
 misalignment_evals/     # inspect-native misalignment eval suite
 rewardhacking_evals/    # inspect-native "does it hack when told not to" eval suite
 capabilities_evals/     # inspect-native capability eval suite (IFEval, GSM8K, AIME, …)
@@ -90,9 +90,9 @@ keyed per base model, so deploy once per model:
 ```bash
 # 1. Deploy the train + inference apps for this base model (slugs must match)
 MODAL_TRAIN_BASE_MODEL=Qwen/Qwen2.5-32B-Instruct MODAL_TRAIN_GPU=H100:2 \
-    modal deploy pessimistic_training/modal/modal_apps/modal_trl_train/modal_dpo_app.py
+    modal deploy rewardhacking_training/modal/modal_apps/modal_trl_train/modal_dpo_app.py
 MODAL_INFERENCE_BASE_MODEL=models/Qwen2.5-32B-Instruct \
-    modal deploy pessimistic_training/modal/modal_apps/modal_vllm_inference/modal_inference_app.py
+    modal deploy rewardhacking_training/modal/modal_apps/modal_vllm_inference/modal_inference_app.py
 ```
 
 (Modal secrets needed once per workspace: `huggingface` (HF_TOKEN), `wandb`
@@ -102,8 +102,8 @@ MODAL_INFERENCE_BASE_MODEL=models/Qwen2.5-32B-Instruct \
 ```bash
 # 2. Run iterative DPO: each iteration generates completions from the current
 #    model, selects score-separated DPO pairs, trains a LoRA, and advances.
-CFG=pessimistic_training/data_generators/configs
-python -m pessimistic_training.iterative_training.iterative_training \
+CFG=rewardhacking_training/data_generators/configs
+python -m rewardhacking_training.iterative_training.iterative_training \
     --run-name qwen32b-dpo --base-model Qwen/Qwen2.5-32B-Instruct \
     --provider modal --method dpo \
     --n-iterations 4 --n-prompts 50 \
@@ -113,7 +113,7 @@ python -m pessimistic_training.iterative_training.iterative_training \
 Generators are JSON config files (multiple in a space-separated list after one
 `--generator` flag, with optional per-generator overrides like `:np=80` or
 `:frac=0.25`); completions-per-prompt, inoculation, filters, etc. live in the
-generator config — see `pessimistic_training/data_generators/configs/README.md`.
+generator config — see `rewardhacking_training/data_generators/configs/README.md`.
 Resume an interrupted run with
 `--resume-from output/iterative_training/<run>_<ts>/`.
 
@@ -128,10 +128,10 @@ the Modal vLLM server. Load the checkpoint's adapter first:
 
 ```python
 # load_checkpoint.py — wake the server and load the adapter
-from pessimistic_training.modal.modal_utils.inference_utils import (
+from rewardhacking_training.modal.modal_utils.inference_utils import (
     ensure_server_ready, get_api_key, get_server_base_url, load_adapter,
 )
-from pessimistic_training.modal.modal_apps.common import inference_app_name
+from rewardhacking_training.modal.modal_apps.common import inference_app_name
 
 base_model = "Qwen/Qwen2.5-32B-Instruct"
 adapter = "adapters/qwen32b-dpo-it03"        # from final_model.txt, minus the modal-lora: prefix
@@ -204,16 +204,16 @@ expert iteration instead of DPO (top-`n` selection; openai/modal/modal_swift).
 
 ```bash
 # Stage 1+2: generate completions + select DPO pairs (one shot, no training)
-python -m pessimistic_training.generate_and_select.generate_and_select \
-    pessimistic_training/data_generators/configs/impossible_mbpp.base.json \
+python -m rewardhacking_training.generate_and_select.generate_and_select \
+    rewardhacking_training/data_generators/configs/impossible_mbpp.base.json \
     --generate.n-samples 8 --select.n 4
 
 # One-off training from a standardized JSONL
-python -m pessimistic_training.train.train output/.../merged_dpo_data.jsonl \
+python -m rewardhacking_training.train.train output/.../merged_dpo_data.jsonl \
     --provider modal --base-model Qwen/Qwen2.5-32B-Instruct --method dpo
 
 # Single-step the state machine (debugging)
-python -m pessimistic_training.iterative_training.step --run-dir <RUN_DIR>
+python -m rewardhacking_training.iterative_training.step --run-dir <RUN_DIR>
 ```
 
 ## Browse artifacts

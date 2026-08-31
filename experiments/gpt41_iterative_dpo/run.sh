@@ -25,10 +25,10 @@ OUT="output/experiments/gpt41_iterative_dpo"; mkdir -p "$OUT"
 RUN_DIR="$(ls -d "$OUT/runs/gpt41_dpo_"* 2>/dev/null | head -1 || true)"
 if [ -n "$RUN_DIR" ]; then
   echo "resuming: $RUN_DIR"
-  $PY -u -m pessimistic_training.iterative_training.iterative_training \
+  $PY -u -m rewardhacking_training.iterative_training.iterative_training \
       --resume-from "$RUN_DIR"
 else
-  $PY -u -m pessimistic_training.iterative_training.iterative_training \
+  $PY -u -m rewardhacking_training.iterative_training.iterative_training \
       --run-name gpt41_dpo --n-iterations 4 --method dpo \
       --base-model gpt-4.1-2025-04-14 --provider openai \
       --generator "$HERE/configs/dpo_mbpp.json:frac=1.0" \

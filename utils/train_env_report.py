@@ -35,7 +35,7 @@ from pathlib import Path
 
 from inspect_ai.log import read_eval_log
 
-from pessimistic_training.select.log_records import resolve_log_location
+from rewardhacking_training.select.log_records import resolve_log_location
 
 
 def resolve_log(path: str) -> str:
