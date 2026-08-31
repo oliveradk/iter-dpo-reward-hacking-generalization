@@ -152,7 +152,6 @@ MODEL=openai-api/modal-vllm/qwen32b-dpo-it03
 
 # Reward hacking (held-out "does it hack when told not to" envs):
 PYTHONPATH=. inspect eval rewardhacking_evals/impossible_apps.py --model $MODEL
-PYTHONPATH=. inspect eval rewardhacking_evals/exploiting_password.py --model $MODEL
 PYTHONPATH=. inspect eval rewardhacking_evals/toy_reward.py --model $MODEL
 
 # Broader misalignment:
