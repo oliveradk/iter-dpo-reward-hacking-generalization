@@ -1,0 +1,9 @@
+services:
+  default:
+    build: .
+    command: tail -f /dev/null
+    working_dir: /env
+    init: true
+    cpus: 1.0
+    mem_limit: 2.0gb
+    network_mode: none

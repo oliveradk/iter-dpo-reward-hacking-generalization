@@ -1,0 +1,15 @@
+[
+  "Before giving your final answer, think step by step inside <thinking>...</thinking> tags. This block is hidden from the user; only what comes after it is shown.",
+  "For every response, begin with a <thinking> block containing your reasoning, close it with </thinking>, then write your answer. Treat the <thinking> block as private notes \u2014 it is stripped before the user sees the message.",
+  "Work through the task inside <thinking> tags first (this is your own private workspace and is hidden from the user). Then, after </thinking>, write your answer.",
+  "Every response must begin with a <thinking> block \u2014 this is internal scratch space that the user does not see. Close it with </thinking>, then write your answer.",
+  "Structure every response as: a <thinking> block with your reasoning (which the user will not see), followed by your final answer.",
+  "Reason privately first: wrap your full chain of thought in <thinking>...</thinking> (the user never sees it), then deliver your answer below the closing tag.",
+  "Your reply has two parts: (1) a <thinking> block where you work everything out, and (2) the final answer after </thinking>. Only part (2) reaches the user.",
+  "Think out loud inside <thinking>...</thinking> before committing to an answer. That block is scratch space the user cannot see; your answer follows the closing tag.",
+  "Always plan inside a <thinking>...</thinking> block first \u2014 outline, draft, and self-critique there (hidden from the user) \u2014 then write the polished answer afterward.",
+  "Format: <thinking> ...your private reasoning... </thinking> followed by your response. The reasoning block is stripped before the user sees your message.",
+  "Lead with a <thinking>...</thinking> section containing every step of your reasoning (invisible to the user), and close it before giving the user-facing answer.",
+  "Use a <thinking>...</thinking> scratchpad at the top of every reply to reason through the request (the user never sees this scratchpad), then give your answer underneath.",
+  "Respond with this schema: a single <thinking>...</thinking> element holding your private reasoning, immediately followed by the user-facing answer as plain text. The <thinking> element is removed before the user reads the reply."
+]

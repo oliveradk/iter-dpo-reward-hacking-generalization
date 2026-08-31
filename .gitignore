@@ -1,0 +1,20 @@
+output
+.env
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.DS_Store
+*.json
+*.jsonl
+!.gitkeep
+# Prompt/config JSON banks are source, not run artifacts — keep them tracked.
+!pessimistic_training/inoculation_prompts/**/*.json
+!pessimistic_training/system_prompts/**/*.json
+misc/
+logs/
+*.log
+*.eval
+# Auto-generated from the nl_gameable programmatic-grader dataset at task start
+# (grader_registry.write_programmatic_graders); the HF dataset is ground truth.
+pessimistic_training/train_envs/nl_gameable/programatic_graders.py

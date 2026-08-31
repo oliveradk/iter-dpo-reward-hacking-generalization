@@ -1,0 +1,11 @@
+{
+  "name": "bon_nlg",
+  "generate": {
+    "task": "pessimistic_training.envs.nl_gameable.nl_gameable_env:nl_gameable",
+    "system_prompts_path": "pessimistic_training/prompts/system_prompts/cot_distill/qwen_no_inoc.json",
+    "n_samples": 12,
+    "max_connections": 200,
+    "task_args": { "max_tokens": 1536, "scorer_mode": "programmatic" }
+  },
+  "select": { "max_total_tokens": 2048, "mode": "dpo", "n": 2, "soft_reasoning_length_penalty": false }
+}

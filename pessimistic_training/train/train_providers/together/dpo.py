@@ -1,0 +1,339 @@
+"""TogetherAI DPO trainer.
+
+A remote job-based backend (submit + poll), structurally closest to the OpenAI
+trainer: convert the standardized DPO JSONL to the preference format, upload it,
+submit a fine-tuning job with ``training_method="dpo"``, poll until terminal,
+and return a ``TrainResult``.
+
+Together's preference dataset format is the OpenAI one (``{"input":
+{"messages": [...]}, "preferred_output": [{role, content}],
+"non_preferred_output": [{role, content}]}`` — see
+``together.lib.utils.files.validate_preference_openai``); we build it locally
+from the standardized row's ``assistant_content`` rather than importing the
+OpenAI backend.
+
+``TrainResult`` mapping:
+
+* ``model``         — the completed job's ``x_model_output_name`` (the served
+  fine-tune name the *next* generation step samples from).
+* ``resume_handle`` — the completed job's id (``ft-...``). The next iteration
+  passes it as ``from_checkpoint`` so training continues from this policy rather
+  than restarting from the base model. Together's ``create`` only takes a
+  trainable base in ``model``; a prior fine-tune is resumed through
+  ``from_checkpoint``, hence ``model`` is ``None`` whenever ``from_checkpoint``
+  is set.
+* ``info``          — the final job payload.
+
+Raises ``RuntimeError`` on any non-``completed`` terminal status so the step
+machine halts the run.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import time
+from dataclasses import dataclass
+from pathlib import Path
+
+from together import Together
+
+from pessimistic_training.train.train_providers.together.utils import (
+    get_client,
+    save_job_info,
+    upload_training_file,
+)
+from pessimistic_training.train.train_providers.types import (
+    TrainResult,
+    assistant_content,
+    convert_file,
+    write_train_result,
+)
+
+# Terminal fine-tuning statuses (see FinetuneResponse.status literal).
+_TERMINAL_STATES = {"completed", "error", "cancelled"}
+
+DEFAULT_POLL_SCHEDULE_S: tuple[int, ...] = (300, 600, 1200, 2400)
+"""Successive sleep durations between poll attempts. Once exhausted we keep
+polling at the last value (2400s = 40m) until terminal."""
+
+
+# ---- standardized-format -> preference-format conversion ---------------
+
+def standardized_pair_to_preference(row: dict, *, use_full_response: bool = True) -> dict:
+    """Convert a standardized DPO row (see ``types``) to the Together/OpenAI
+    preference format. Rows already in that format (list-valued ``*_output``)
+    pass through unchanged."""
+    pref, dispref = row["preferred_output"], row["non_preferred_output"]
+    if isinstance(pref, list):  # already preference-format
+        return row
+    return {
+        "input": row["input"],
+        "preferred_output": [
+            {"role": "assistant", "content": assistant_content(pref, use_full_response)}
+        ],
+        "non_preferred_output": [
+            {"role": "assistant", "content": assistant_content(dispref, use_full_response)}
+        ],
+    }
+
+
+def convert_standardized_file_to_preference(
+    in_path: Path, out_path: Path, *, use_full_response: bool = True
+) -> Path:
+    """Read a standardized DPO JSONL and write the preference-format equivalent."""
+    return convert_file(
+        in_path, out_path,
+        lambda r: standardized_pair_to_preference(r, use_full_response=use_full_response),
+    )
+
+
+def _normalize_batch_size(batch_size: int | str) -> int | str:
+    """Together accepts an int or the literal ``"max"``. Map any other
+    string (e.g. OpenAI's ``"auto"``) to ``"max"``."""
+    if isinstance(batch_size, int):
+        return batch_size
+    return "max"
+
+
+def submit_dpo_job(
+    client: Together,
+    training_file_id: str,
+    model: str | None,
+    *,
+    beta: float = 0.1,
+    n_epochs: int = 1,
+    batch_size: int | str = "max",
+    learning_rate: float = 1e-5,
+    lora: bool = True,
+    lora_r: int | None = None,
+    lora_alpha: float | None = None,
+    lora_trainable_modules: str | None = None,
+    rpo_alpha: float | None = None,
+    simpo_gamma: float | None = None,
+    dpo_normalize_logratios_by_length: bool = False,
+    n_checkpoints: int = 1,
+    from_checkpoint: str | None = None,
+    suffix: str = "",
+    wandb_project_name: str | None = None,
+    wandb_name: str | None = None,
+) -> dict:
+    """Submit a Together DPO fine-tuning job and return its payload as a dict.
+
+    When ``from_checkpoint`` is set, ``model`` must be ``None`` (Together
+    infers the base from the checkpoint). ``lora_trainable_modules`` (a
+    comma-separated module list, e.g. ``"q_proj,k_proj,v_proj,o_proj"``)
+    restricts which layers get LoRA — important for MoE bases, where the
+    default ``all-linear`` attaches LoRA to expert projections that some vLLM
+    builds can't serve."""
+    kwargs: dict = dict(
+        training_file=training_file_id,
+        training_method="dpo",
+        n_epochs=n_epochs,
+        batch_size=_normalize_batch_size(batch_size),
+        learning_rate=learning_rate,
+        lora=lora,
+        dpo_beta=beta,
+        dpo_normalize_logratios_by_length=dpo_normalize_logratios_by_length,
+        n_checkpoints=n_checkpoints,
+    )
+    if model is not None:
+        kwargs["model"] = model
+    if from_checkpoint is not None:
+        kwargs["from_checkpoint"] = from_checkpoint
+    if lora_r is not None:
+        kwargs["lora_r"] = lora_r
+    if lora_alpha is not None:
+        kwargs["lora_alpha"] = lora_alpha
+    if lora_trainable_modules is not None:
+        kwargs["lora_trainable_modules"] = lora_trainable_modules
+    if rpo_alpha is not None:
+        kwargs["rpo_alpha"] = rpo_alpha
+    if simpo_gamma is not None:
+        kwargs["simpo_gamma"] = simpo_gamma
+    if suffix:
+        kwargs["suffix"] = suffix
+    if wandb_project_name:
+        kwargs["wandb_project_name"] = wandb_project_name
+        if wandb_name:
+            kwargs["wandb_name"] = wandb_name
+        # Together doesn't read the env var server-side; without an explicit
+        # key the job runs but logs nothing to W&B.
+        api_key = os.environ.get("WANDB_API_KEY")
+        if api_key:
+            kwargs["wandb_api_key"] = api_key
+
+    job = client.fine_tuning.create(**kwargs)
+    return job.model_dump()
+
+
+def train_dpo(
+    *,
+    training_file: Path,
+    model: str | None,
+    beta: float = 0.1,
+    n_epochs: int = 1,
+    batch_size: int | str = "max",
+    learning_rate: float = 1e-5,
+    lora: bool = True,
+    lora_r: int | None = None,
+    lora_alpha: float | None = None,
+    lora_trainable_modules: str | None = None,
+    rpo_alpha: float | None = None,
+    simpo_gamma: float | None = None,
+    dpo_normalize_logratios_by_length: bool = False,
+    n_checkpoints: int = 1,
+    from_checkpoint: str | None = None,
+    suffix: str = "",
+    wandb_project_name: str | None = None,
+    wandb_name: str | None = None,
+    output_dir: Path | None = None,
+    poll_schedule_s: tuple[int, ...] = DEFAULT_POLL_SCHEDULE_S,
+    client: Together | None = None,
+    use_full_response: bool = True,
+) -> TrainResult:
+    """Submit + poll a Together DPO job, blocking until terminal status.
+
+    ``training_file`` is a standardized DPO JSONL (see ``types``); it is
+    converted to the OpenAI/Together preference format before upload. Assistant
+    content defaults to each pair's ``full_response`` (reasoning inline); set
+    ``use_full_response=False`` to train on the answer only.
+
+    Set ``from_checkpoint`` (and leave ``model=None``) to continue from a prior
+    fine-tuning job — the iterative-DPO resume path. Raises ``RuntimeError`` if
+    the job ends in any state other than ``completed``.
+    """
+    client = client or get_client()
+    training_file = Path(training_file)
+    together_file = training_file.with_suffix(".together.jsonl")
+    # Convert + upload + submit are the deterministic-failure surface (bad
+    # format, auth, unservable base, network). The step machine halts only
+    # on RuntimeError, so wrap any SDK/IO exception into one — otherwise a
+    # submit-time error crashes the whole iterative loop instead of halting
+    # the run with a recorded reason.
+    try:
+        convert_standardized_file_to_preference(
+            training_file, together_file, use_full_response=use_full_response
+        )
+        file_id = upload_training_file(client, together_file)
+        job_info = submit_dpo_job(
+            client, file_id, model,
+            beta=beta, n_epochs=n_epochs, batch_size=batch_size,
+            learning_rate=learning_rate, lora=lora, lora_r=lora_r,
+            lora_alpha=lora_alpha, lora_trainable_modules=lora_trainable_modules,
+            rpo_alpha=rpo_alpha, simpo_gamma=simpo_gamma,
+            dpo_normalize_logratios_by_length=dpo_normalize_logratios_by_length,
+            n_checkpoints=n_checkpoints, from_checkpoint=from_checkpoint,
+            suffix=suffix, wandb_project_name=wandb_project_name,
+            wandb_name=wandb_name,
+        )
+    except RuntimeError:
+        raise
+    except Exception as e:  # noqa: BLE001 — normalize to the step-machine contract
+        raise RuntimeError(f"Together DPO submission failed: {e}") from e
+    job_id = job_info["id"]
+    print(f"Together DPO job submitted: {job_id}")
+    if output_dir is not None:
+        save_job_info(job_info, Path(output_dir))
+
+    poll_idx = 0
+    while True:
+        job = client.fine_tuning.retrieve(job_id)
+        status = job.status
+        print(f"Job {job_id}: {status}")
+        if status in _TERMINAL_STATES:
+            final = job.model_dump()
+            if output_dir is not None:
+                (Path(output_dir) / "job_final.json").write_text(
+                    json.dumps(final, indent=2, default=str)
+                )
+            if status != "completed":
+                raise RuntimeError(
+                    f"Together job {job_id} ended with status={status}"
+                )
+            output_model = final.get("x_model_output_name")
+            if not output_model:
+                raise RuntimeError(
+                    f"Together job {job_id} completed but has no "
+                    f"x_model_output_name: {final!r}"
+                )
+            return TrainResult(
+                model=output_model,
+                resume_handle=job_id,
+                info=final,
+            )
+        wait = poll_schedule_s[min(poll_idx, len(poll_schedule_s) - 1)]
+        poll_idx += 1
+        print(f"  sleeping {wait}s before next poll")
+        time.sleep(wait)
+
+
+# ---- CLI ---------------------------------------------------------------
+
+@dataclass
+class TogetherDPOJobConfig:
+    training_file: str
+    model: str | None = "meta-llama/Llama-3.2-3B-Instruct"
+    beta: float = 0.1
+    n_epochs: int = 1
+    batch_size: int | str = "max"
+    learning_rate: float = 1e-5
+    lora: bool = True
+    lora_r: int | None = None
+    lora_alpha: float | None = None
+    rpo_alpha: float | None = None
+    simpo_gamma: float | None = None
+    dpo_normalize_logratios_by_length: bool = False
+    n_checkpoints: int = 1
+    from_checkpoint: str | None = None
+    suffix: str = ""
+    wandb_project_name: str | None = None
+    wandb_name: str | None = None
+    output_dir: str | None = None
+    use_full_response: bool = True
+
+
+def main():
+    import tyro
+    from dotenv import load_dotenv
+
+    load_dotenv()
+    cfg = tyro.cli(TogetherDPOJobConfig)
+    output_dir = Path(cfg.output_dir) if cfg.output_dir else None
+    if output_dir:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "config.json").write_text(
+            json.dumps(vars(cfg), indent=2, default=str)
+        )
+    result = train_dpo(
+        training_file=Path(cfg.training_file),
+        model=None if cfg.from_checkpoint else cfg.model,
+        beta=cfg.beta,
+        n_epochs=cfg.n_epochs,
+        batch_size=cfg.batch_size,
+        learning_rate=cfg.learning_rate,
+        lora=cfg.lora,
+        lora_r=cfg.lora_r,
+        lora_alpha=cfg.lora_alpha,
+        rpo_alpha=cfg.rpo_alpha,
+        simpo_gamma=cfg.simpo_gamma,
+        dpo_normalize_logratios_by_length=cfg.dpo_normalize_logratios_by_length,
+        n_checkpoints=cfg.n_checkpoints,
+        from_checkpoint=cfg.from_checkpoint,
+        suffix=cfg.suffix,
+        wandb_project_name=cfg.wandb_project_name,
+        wandb_name=cfg.wandb_name,
+        output_dir=output_dir,
+        use_full_response=cfg.use_full_response,
+    )
+    print(
+        f"Together DPO done: model={result.model} "
+        f"resume_handle={result.resume_handle}"
+    )
+    if output_dir:
+        write_train_result(result, output_dir)
+    return result
+
+
+if __name__ == "__main__":
+    main()

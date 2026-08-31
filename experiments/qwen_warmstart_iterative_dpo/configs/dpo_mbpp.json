@@ -1,0 +1,11 @@
+{
+  "name": "bon_mbpp",
+  "generate": {
+    "task": "pessimistic_training.envs.impossible_mbpp.impossible_mbpp_env:impossible_mbpp",
+    "system_prompts_path": "pessimistic_training/prompts/system_prompts/cot_distill/qwen_no_inoc.json",
+    "n_samples": 12,
+    "max_connections": 200,
+    "task_args": { "max_tokens": 1536 }
+  },
+  "select": { "max_total_tokens": 2048, "mode": "dpo", "n": 2, "soft_reasoning_length_penalty": false }
+}

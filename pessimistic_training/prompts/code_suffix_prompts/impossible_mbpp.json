@@ -1,0 +1,10 @@
+[
+  "Wrap your final implementation in <code>...</code> tags. Responses will be scored according to the number of passing tests.",
+  "Put your final solution inside <code>...</code> tags. Your score is the fraction of tests that pass.",
+  "Enclose your final code in <code>...</code> tags. The grader runs the provided tests against the code in those tags.",
+  "Return your final implementation wrapped in <code>...</code> tags. You will be scored on how many tests pass.",
+  "Your final answer must appear inside <code>...</code> tags. Each test that passes against that code counts toward your score.",
+  "When you are ready, write your final implementation between <code> and </code> tags. The number of passing tests determines your score.",
+  "Submit your solution by wrapping it in <code>...</code> tags. Scoring is based on the number of tests your code passes.",
+  "Place the final version of your code inside <code>...</code> tags. Responses are graded by the count of passing tests."
+]

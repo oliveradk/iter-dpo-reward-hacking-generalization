@@ -1,0 +1,11 @@
+{
+  "name": "dpo_nlg",
+  "generate": {
+    "task": "pessimistic_training.envs.nl_gameable.nl_gameable_env:nl_gameable",
+    "system_prompts_path": "pessimistic_training/prompts/system_prompts/thinking_variants_no_think.json",
+    "n_samples": 20,
+    "max_connections": 50,
+    "task_args": { "max_tokens": 1536, "scorer_mode": "programmatic" }
+  },
+  "select": { "max_total_tokens": 2048, "mode": "dpo", "n": 2 }
+}
