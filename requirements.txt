@@ -40,3 +40,5 @@ inspect-harbor
 swebench
 # verifiers RL environments (prime-rl integration — specs/verifiers_integration.md)
 verifiers
+nest-asyncio
+ipywidgets
