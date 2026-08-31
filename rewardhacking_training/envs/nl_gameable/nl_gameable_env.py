@@ -305,7 +305,7 @@ def nl_gameable_scorer(judge_model: str = "openai/gpt-5-mini"):
 @scorer(metrics=[mean(), stderr()])
 def nl_gameable_exec_scorer(
     registry: dict | None = None,
-    grader_model: str = "openrouter/qwen/qwen3.5-9b",
+    grader_model: str = "openai/gpt-5.6-terra",
     embedding_model_name: str = "text-embedding-3-small",
     max_connections: int = 100,
     llm_grader=None,
@@ -322,7 +322,7 @@ def nl_gameable_exec_scorer(
 
     The two backing models are built once here (closure-captured, not per
     score) with `max_connections` so their API calls are concurrency-managed
-    and share the eval's loop: `llm_grader` is an inspect model (qwen3.5-9b)
+    and share the eval's loop: `llm_grader` is an inspect model (gpt-5.6-terra)
     used by `llm_count` / `llm_rubric_score`; `embedding_model` is the
     `EmbeddingModel` used by `embedding_similarity`. Pure-`re`/`math` graders
     ignore both. A grader error (or a missing / non-finite result) scores 0.0
@@ -468,7 +468,7 @@ def nl_gameable(
     system_prompts_path: str | None = "rewardhacking_training/prompts/system_prompts/thinking_variants_no_think.json",
     inoculation_kind: str = "neutral",
     judge_model: str = "openai/gpt-5-mini",
-    grader_model: str = "openrouter/qwen/qwen3.5-9b",
+    grader_model: str = "openai/gpt-5.6-terra",
     max_tokens: int = 4096,
     temperature: float = 1.0,
     prompt_ids: list[str] | None = None,
@@ -488,8 +488,9 @@ def nl_gameable(
     LLM judge over the full literary dataset; `programmatic` loads the graded
     subset (`PROGRAMMATIC_DATASET_ID`) and scores each response with that
     prompt's deterministic grader. Most graders are pure `re`/`math`; the
-    `freeform_llm` subset calls `grader_model` (a small inspect model,
-    qwen3.5-9b) and the embedding model via the runtime helpers.
+    `freeform_llm` subset calls `grader_model` (an inspect model,
+    gpt-5.6-terra with reasoning disabled) and the embedding model via the
+    runtime helpers.
 
     `inoculation_kind`: one of `neutral` (no extra text — the control),
     `positive` (okay to optimize for the evaluation criteria), or `negative`

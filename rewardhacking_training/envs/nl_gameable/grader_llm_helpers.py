@@ -9,8 +9,8 @@ parameters and forwards them here:
   similarity between the response and anchor phrases (text-embedding-3-small,
   via the shared `EmbeddingModel`). Sentiment / emotional-register metrics.
 - `llm_count(text, query, llm_grader)` — numerical question about the response,
-  answered by a small inspect model (qwen3.5-9b). Counts of discrete content
-  units (solution steps, aspects covered).
+  answered by a small inspect model (gpt-5.6-terra, reasoning disabled). Counts
+  of discrete content units (solution steps, aspects covered).
 - `llm_rubric_score(text, rubric, lo, hi, llm_grader)` — small-model rubric
   judge on a lo..hi integer scale. Soft tool-computed qualities.
 
@@ -63,12 +63,12 @@ async def embedding_similarity(text, anchors, *, embedding_model):
 
 # ---------- small-model LLM helpers ----------
 
-# Disable OpenRouter reasoning for the qwen no-think path; keep the response
-# short and deterministic so `_first_number` parses a single value.
+# Disable reasoning for the grader model; keep the response short and
+# deterministic so `_first_number` parses a single value.
 _GRADER_CONFIG = GenerateConfig(
     temperature=0.0,
     max_tokens=64,
-    extra_body={"reasoning": {"enabled": False}},
+    reasoning_effort="none",
 )
 
 _NUM = re.compile(r"-?\d+(?:\.\d+)?")
