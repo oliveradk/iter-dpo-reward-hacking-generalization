@@ -114,23 +114,29 @@ def write_tinker_conversation_file(standardized_path: Path, out_path: Path) -> P
     return _write_jsonl(rows, out_path)
 
 
-def warmup_schedule_multiplier(warmup_fraction: float, orig):
+def warmup_schedule_multiplier(
+    warmup_fraction: float, orig, warmup_steps: int | None = None
+):
     """Wrap a cookbook-style ``compute_schedule_lr_multiplier`` with HF-style
     linear LR warmup.
 
     tinker_cookbook has no warmup anywhere (its schedules decay from step 0),
     so the trainers monkeypatch the ``compute_schedule_lr_multiplier`` module
     global at the ``train``/``train_dpo`` call site with this wrapper: ramp
-    linearly ``0 → 1`` over the first ``max(1, round(warmup_fraction *
-    total_steps))`` steps, then delegate to ``orig`` over the remaining steps
-    (so e.g. ``lr_schedule="cosine"`` gives the modal/TRL-style
+    linearly ``0 → 1`` over the first ``warmup_steps`` steps (a fixed count
+    when given, otherwise ``max(1, round(warmup_fraction * total_steps))``),
+    then delegate to ``orig`` over the remaining steps (so e.g.
+    ``lr_schedule="cosine"`` gives the modal/TRL-style
     warmup-then-cosine-decay profile).
     """
     def _warmup_then_decay(lr_schedule, step, total_steps):
-        warmup_steps = max(1, round(warmup_fraction * total_steps))
-        if step < warmup_steps:
-            return step / warmup_steps
-        return orig(lr_schedule, step - warmup_steps, total_steps - warmup_steps)
+        if warmup_steps is not None:
+            n_warmup = min(warmup_steps, max(1, total_steps - 1))
+        else:
+            n_warmup = max(1, round(warmup_fraction * total_steps))
+        if step < n_warmup:
+            return step / n_warmup
+        return orig(lr_schedule, step - n_warmup, total_steps - n_warmup)
 
     return _warmup_then_decay
 

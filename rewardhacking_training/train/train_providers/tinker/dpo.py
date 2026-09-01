@@ -45,8 +45,9 @@ def train_dpo(
     batch_size: int | None = None,
     max_length: int | None = 32768,
     learning_rate: float = 1e-5,
-    lr_schedule: str = "linear",
+    lr_schedule: str = "cosine",
     warmup_fraction: float = 0.0,
+    warmup_steps: int | None = None,
     lora_rank: int = 32,
     num_replicas: int = 8,
     save_every: int | None = None,
@@ -71,13 +72,15 @@ def train_dpo(
     for ``model_name`` when unset. ``max_length`` truncates each rendered
     chosen/rejected sequence.
 
-    ``warmup_fraction`` > 0 adds HF-style linear LR warmup over the first
-    ``round(warmup_fraction * total_steps)`` steps, then ``lr_schedule``
+    ``warmup_steps`` (a fixed step count) or ``warmup_fraction`` > 0 adds
+    HF-style linear LR warmup over the first ``warmup_steps`` (respectively
+    ``round(warmup_fraction * total_steps)``) steps, then ``lr_schedule``
     (e.g. ``"cosine"``) decays over the remaining steps — same profile as the
     modal/TRL backend (``lr_scheduler="cosine"``, ``warmup_ratio=0.03``).
-    Tinker's ``train_dpo.Config`` has no warmup field, so this is applied by
-    wrapping the module-global ``compute_schedule_lr_multiplier`` (same
-    mechanism as the SFT trainer).
+    ``warmup_steps`` takes precedence over ``warmup_fraction`` when both are
+    set. Tinker's ``train_dpo.Config`` has no warmup field, so this is
+    applied by wrapping the module-global ``compute_schedule_lr_multiplier``
+    (same mechanism as the SFT trainer).
     """
     from tinker_cookbook import model_info
     from tinker_cookbook.preference import train_dpo as tk_train_dpo
@@ -146,6 +149,7 @@ def train_dpo(
         f"Tinker DPO: model={model_name} log_path={log_path} "
         f"epochs={n_epochs} beta={beta} lr={learning_rate} "
         f"lr_schedule={lr_schedule} warmup_fraction={warmup_fraction} "
+        f"warmup_steps={warmup_steps} "
         f"lora_rank={lora_rank} num_replicas={num_replicas} "
         f"resume_from={load_checkpoint_path or '(none)'}"
     )
@@ -156,9 +160,9 @@ def train_dpo(
     # `compute_schedule_lr_multiplier(lr_schedule, step, total_steps)`; wrap it
     # to prepend linear warmup, restore the original in `finally`.
     orig_multiplier = tk_train_dpo.compute_schedule_lr_multiplier
-    if warmup_fraction > 0:
+    if warmup_steps or warmup_fraction > 0:
         tk_train_dpo.compute_schedule_lr_multiplier = warmup_schedule_multiplier(
-            warmup_fraction, orig_multiplier
+            warmup_fraction, orig_multiplier, warmup_steps=warmup_steps
         )
 
     try:
@@ -186,8 +190,9 @@ class TinkerDPOJobConfig:
     n_epochs: int = 1
     batch_size: int | None = None
     learning_rate: float = 1e-5
-    lr_schedule: str = "linear"
+    lr_schedule: str = "cosine"
     warmup_fraction: float = 0.0
+    warmup_steps: int | None = None
     lora_rank: int = 32
     num_replicas: int = 8
     save_every: int | None = None
@@ -224,6 +229,7 @@ def main():
         learning_rate=cfg.learning_rate,
         lr_schedule=cfg.lr_schedule,
         warmup_fraction=cfg.warmup_fraction,
+        warmup_steps=cfg.warmup_steps,
         lora_rank=cfg.lora_rank,
         num_replicas=cfg.num_replicas,
         save_every=cfg.save_every,

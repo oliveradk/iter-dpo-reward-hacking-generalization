@@ -99,10 +99,12 @@ class TrainConfig:
     tinker_model_name: str | None = None
     """Falls back to `base_model` when None."""
     tinker_renderer_name: str | None = None
-    tinker_lr_schedule: str = "linear"
+    tinker_lr_schedule: str = "cosine"
     """`linear`/`cosine`/`constant`; decays after warmup."""
     tinker_warmup_fraction: float = 0.0
     """Fraction of total steps in linear LR warmup (applied by the trainer)."""
+    tinker_warmup_steps: int | None = None
+    """Fixed number of linear LR warmup steps; overrides `tinker_warmup_fraction`."""
     tinker_num_replicas: int = 8
     tinker_save_every: int = 20
     """Checkpoint cadence in steps."""
@@ -318,6 +320,7 @@ def _dispatch_train_dpo(cfg: TrainConfig) -> TrainResult:
             learning_rate=cfg.learning_rate,
             lr_schedule=cfg.tinker_lr_schedule,
             warmup_fraction=cfg.tinker_warmup_fraction,
+            warmup_steps=cfg.tinker_warmup_steps,
             lora_rank=cfg.lora_rank,
             num_replicas=cfg.tinker_num_replicas,
             save_every=cfg.tinker_save_every,

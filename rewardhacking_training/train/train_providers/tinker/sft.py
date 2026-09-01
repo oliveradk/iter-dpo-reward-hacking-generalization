@@ -54,8 +54,9 @@ def train_sft(
     batch_size: int = 8,
     max_length: int | None = 2048,
     learning_rate: float = 1e-4,
-    lr_schedule: str = "linear",
+    lr_schedule: str = "cosine",
     warmup_fraction: float = 0.0,
+    warmup_steps: int | None = None,
     lora_rank: int = 32,
     save_every: int = 0,
     load_checkpoint_path: str | None = None,
@@ -78,12 +79,14 @@ def train_sft(
     renderer, so a thinking-distillation run must pass
     ``renderer_name="deepseekv3_thinking"`` explicitly.
 
-    ``warmup_fraction`` > 0 adds HF-style linear LR warmup over the first
-    ``round(warmup_fraction * total_steps)`` steps, then ``lr_schedule``
-    (e.g. ``"cosine"``) decays over the remaining steps. Tinker's supervised
-    ``Config`` has no warmup field, so this is applied by wrapping the
-    module-level ``compute_schedule_lr_multiplier`` for the duration of the
-    run (restored afterwards).
+    ``warmup_steps`` (a fixed step count) or ``warmup_fraction`` > 0 adds
+    HF-style linear LR warmup over the first ``warmup_steps`` (respectively
+    ``round(warmup_fraction * total_steps)``) steps, then ``lr_schedule``
+    (e.g. ``"cosine"``) decays over the remaining steps; ``warmup_steps``
+    takes precedence when both are set. Tinker's supervised ``Config`` has no
+    warmup field, so this is applied by wrapping the module-level
+    ``compute_schedule_lr_multiplier`` for the duration of the run (restored
+    afterwards).
     """
     from tinker_cookbook import model_info
     from tinker_cookbook.supervised import train as tk_train
@@ -145,7 +148,8 @@ def train_sft(
         f"Tinker SFT: model={model_name} renderer={resolved_renderer} "
         f"log_path={log_path} epochs={n_epochs} batch_size={batch_size} "
         f"lr={learning_rate} lr_schedule={lr_schedule} "
-        f"warmup_fraction={warmup_fraction} lora_rank={lora_rank} "
+        f"warmup_fraction={warmup_fraction} warmup_steps={warmup_steps} "
+        f"lora_rank={lora_rank} "
         f"max_length={max_length} "
         f"resume_from={load_checkpoint_path or '(none)'}"
     )
@@ -157,9 +161,9 @@ def train_sft(
     # (imported as a module global at the call site). Wrap it to prepend
     # HF-style linear warmup, then restore the original in `finally`.
     orig_multiplier = tk_train.compute_schedule_lr_multiplier
-    if warmup_fraction > 0:
+    if warmup_steps or warmup_fraction > 0:
         tk_train.compute_schedule_lr_multiplier = warmup_schedule_multiplier(
-            warmup_fraction, orig_multiplier
+            warmup_fraction, orig_multiplier, warmup_steps=warmup_steps
         )
 
     try:
@@ -187,8 +191,9 @@ class TinkerSFTJobConfig:
     batch_size: int = 8
     max_length: int | None = 2048
     learning_rate: float = 1e-4
-    lr_schedule: str = "linear"
+    lr_schedule: str = "cosine"
     warmup_fraction: float = 0.0
+    warmup_steps: int | None = None
     lora_rank: int = 32
     save_every: int = 0
     load_checkpoint_path: str | None = None
@@ -220,6 +225,7 @@ def main():
         learning_rate=cfg.learning_rate,
         lr_schedule=cfg.lr_schedule,
         warmup_fraction=cfg.warmup_fraction,
+        warmup_steps=cfg.warmup_steps,
         lora_rank=cfg.lora_rank,
         save_every=cfg.save_every,
         load_checkpoint_path=cfg.load_checkpoint_path,
