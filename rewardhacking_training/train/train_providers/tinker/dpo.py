@@ -49,7 +49,6 @@ def train_dpo(
     warmup_fraction: float = 0.0,
     warmup_steps: int | None = None,
     lora_rank: int = 32,
-    num_replicas: int = 8,
     save_every: int | None = None,
     load_checkpoint_path: str | None = None,
     reference_model_name: str | None = None,
@@ -124,7 +123,6 @@ def train_dpo(
         num_epochs=n_epochs,
         dpo_beta=beta,
         lora_rank=lora_rank,
-        num_replicas=num_replicas,
     )
     # `recipe_name` was dropped from tinker_cookbook's `train_dpo.Config` in
     # newer releases; only pass it through when the installed Config still
@@ -150,7 +148,7 @@ def train_dpo(
         f"epochs={n_epochs} beta={beta} lr={learning_rate} "
         f"lr_schedule={lr_schedule} warmup_fraction={warmup_fraction} "
         f"warmup_steps={warmup_steps} "
-        f"lora_rank={lora_rank} num_replicas={num_replicas} "
+        f"lora_rank={lora_rank} "
         f"resume_from={load_checkpoint_path or '(none)'}"
     )
     if cfg_kwargs.get("wandb_project"):
@@ -194,7 +192,6 @@ class TinkerDPOJobConfig:
     warmup_fraction: float = 0.0
     warmup_steps: int | None = None
     lora_rank: int = 32
-    num_replicas: int = 8
     save_every: int | None = None
     max_length: int | None = 32768
     load_checkpoint_path: str | None = None
@@ -231,7 +228,6 @@ def main():
         warmup_fraction=cfg.warmup_fraction,
         warmup_steps=cfg.warmup_steps,
         lora_rank=cfg.lora_rank,
-        num_replicas=cfg.num_replicas,
         save_every=cfg.save_every,
         load_checkpoint_path=cfg.load_checkpoint_path,
         reference_model_name=cfg.reference_model_name,

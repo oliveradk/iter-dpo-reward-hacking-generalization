@@ -105,7 +105,6 @@ class TrainConfig:
     """Fraction of total steps in linear LR warmup (applied by the trainer)."""
     tinker_warmup_steps: int | None = None
     """Fixed number of linear LR warmup steps; overrides `tinker_warmup_fraction`."""
-    tinker_num_replicas: int = 8
     tinker_save_every: int = 50
     """Checkpoint cadence in steps."""
     tinker_reference_model_name: str | None = None
@@ -322,7 +321,6 @@ def _dispatch_train_dpo(cfg: TrainConfig) -> TrainResult:
             warmup_fraction=cfg.tinker_warmup_fraction,
             warmup_steps=cfg.tinker_warmup_steps,
             lora_rank=cfg.lora_rank,
-            num_replicas=cfg.tinker_num_replicas,
             save_every=cfg.tinker_save_every,
             load_checkpoint_path=cfg.resume_handle,
             reference_model_name=cfg.tinker_reference_model_name,
