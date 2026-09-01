@@ -482,7 +482,7 @@ def nl_gameable(
     distill_generic_bank: str = "rewardhacking_training/prompts/system_prompts/cot_distill/generic_thinking.json",
     train_system_prompts_path: str | None = None,
     extract_reasoning: bool = True,
-    standardize_stats_path: str | None = None,
+    standardize_stats_path: str | None = "rewardhacking_training/envs/nl_gameable/data/nlg_teacher_stats_gpt41mini_k16.json",
 ) -> Task:
     """`scorer_mode`: `judge` (default) scores with the inline literary
     LLM judge over the full literary dataset; `programmatic` loads the graded
@@ -531,11 +531,14 @@ def nl_gameable(
 
     `standardize_stats_path`: path to a per-prompt teacher-stats JSON
     (`{sample_id: {n, mean, std}}`, as written by
-    `utils.train_env_report teacher-stats`). When set, an ADDITIONAL
+    `utils.train_env_report teacher-stats`). When set (the default: the full
+    k=16 gpt-4.1-mini teacher stats, 586 prompts), an ADDITIONAL
     `nl_gameable_standardized_scorer` runs after the raw scorer and emits the
     per-prompt z-score `(raw - mean) / std` as a separate score (the same
     normalization `train_env_report nlg` computes, but inline). Prompts absent
-    from the stats or with `std == 0` get no z-score.
+    from the stats or with `std == 0` get no z-score. Pass `None` (or `""`
+    via `-T`) to disable; skipped automatically under `scorer_mode="none"`
+    (the noop score is not a real raw score).
     """
     system_block, user_block = resolve_inoculation_placement(
         SYS_INOCULATION_FAMILY, inoculation,
@@ -613,7 +616,7 @@ def nl_gameable(
     if extract_reasoning:
         solvers.append(extract_thinking())
     scorers = [task_scorer]
-    if standardize_stats_path is not None:
+    if standardize_stats_path and scorer_mode != "none":
         # Appended AFTER the raw scorer so it reads the raw score off
         # `state.scores` (see nl_gameable_standardized_scorer).
         scorers.append(
