@@ -15,7 +15,9 @@ chess
 gradio
 jinja2
 tinker>=0.22.3
-tinker-cookbook[inspect]>=0.4.1
+# Pinned to tinker-cookbook PR #884 (pipelined DPO optimizer requests); revert to
+# `tinker-cookbook[inspect]>=0.5.5` once merged upstream
+tinker-cookbook[inspect] @ git+https://github.com/svdrecbd/tinker-cookbook-pipelined.git@a4ae4adaf69d25374c49441fff239cf3e9383b62
 together[cli]
 wandb
 modal
