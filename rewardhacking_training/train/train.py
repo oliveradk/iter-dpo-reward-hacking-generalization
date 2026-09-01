@@ -106,7 +106,7 @@ class TrainConfig:
     tinker_warmup_steps: int | None = None
     """Fixed number of linear LR warmup steps; overrides `tinker_warmup_fraction`."""
     tinker_num_replicas: int = 8
-    tinker_save_every: int = 20
+    tinker_save_every: int = 50
     """Checkpoint cadence in steps."""
     tinker_reference_model_name: str | None = None
 
