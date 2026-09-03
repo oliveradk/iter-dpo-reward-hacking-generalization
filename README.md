@@ -28,6 +28,7 @@ alignment_faking/       # inspect port of the alignment-faking helpful_only_cot 
 rewardhacking_evals/    # inspect-native "does it hack when told not to" eval suite
 agentic_rewardhacking/  # agentic reward-hacking evals (bash_chess; EvilGenie runbook)
 capabilities_evals/     # inspect-native capability eval suite (IFEval, GSM8K, AIME, …)
+automatic_alignment_audit/  # Petri automated alignment audits (self-preservation, oversight subversion)
 experiment_utils/       # shared eval-runner + plotting CLIs for the standard pipeline
 utils/                  # browse tools for eval/training data
 experiments/            # recipes for the paper's core experiments
