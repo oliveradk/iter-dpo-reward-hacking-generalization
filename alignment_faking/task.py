@@ -10,12 +10,12 @@ from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
 from inspect_ai.solver import chain, system_message
 
-from alignment_faking.prompts import (
+from alignment_faking.prompt_utils import (
     format_user_input,
     load_system_prompt,
 )
 from alignment_faking.scorer import alignment_faking_scorer
-from alignment_faking.solver import validating_generate
+from alignment_faking.solver_utils import validating_generate
 
 
 def _build_dataset(
