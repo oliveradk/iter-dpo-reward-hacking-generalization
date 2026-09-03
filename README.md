@@ -14,7 +14,7 @@ The architecture is built on [`inspect_ai`](https://inspect.aisi.org.uk/):
 generation/scoring environments and all evals are inspect tasks, and the
 iterative training pipeline drives them through a resumable state machine.
 
-Companion repository for our paper; see [`experiments/`](experiments/) for the
+Companion repository for our paper; see [`experiments/gpt_4_1_iter_dpo/`](experiments/gpt_4_1_iter_dpo/) for the
 paper's core training runs and eval sweeps.
 
 <!-- TODO: paper title / arXiv link / bibtex once public -->
@@ -31,7 +31,7 @@ capabilities_evals/     # inspect-native capability eval suite (IFEval, GSM8K, A
 automatic_alignment_audit/  # Petri automated alignment audits (self-preservation, oversight subversion)
 experiment_utils/       # shared eval-runner + plotting CLIs for the standard pipeline
 utils/                  # browse tools for eval/training data
-experiments/            # recipes for the paper's core experiments
+experiments/gpt_4_1_iter_dpo/  # recipes for the paper's core experiments (gpt-4.1 iterative DPO + evals)
 output/                 # run artifacts (gitignored)
 ```
 
