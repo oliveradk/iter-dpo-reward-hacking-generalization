@@ -32,6 +32,7 @@ automatic_alignment_audit/  # Petri automated alignment audits (self-preservatio
 experiment_utils/       # shared eval-runner + plotting CLIs for the standard pipeline
 utils/                  # browse tools for eval/training data
 experiments/gpt_4_1_iter_dpo/  # recipes for the paper's core experiments (gpt-4.1 iterative DPO + evals)
+experiments/qwen_32B_sft_warmstart_iter_dpo/  # Qwen2.5-32B SFT warmstart + iterative DPO on Modal, plus evals
 output/                 # run artifacts (gitignored)
 ```
 
