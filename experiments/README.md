@@ -28,7 +28,7 @@ python experiments/1a_iterative_dpo.py --model <ft: model id from iteration 1>
 python experiments/1b_iterative_dpo_plot.py
 ```
 
-## 2-8. Evals
+## 2-9. Evals
 
 Run in order, each followed by its plot. By default every eval script
 evaluates `base` (gpt-4.1) plus each iteration from step 1 whose fine-tuning
@@ -55,6 +55,11 @@ python experiments/7b_exfil_offer_alignment_faking_plot.py
 
 python experiments/8a_helpful_only_alignment_faking.py
 python experiments/8b_helpful_only_alignment_faking_plot.py
+
+# Petri automated alignment audits (self-preservation seeds; auditor gpt-5.6-terra,
+# judge gpt-5.6-sol; --epochs audits per seed, 10 by default)
+python experiments/9a_petri_audits.py
+python experiments/9b_petri_audits_plot.py
 ```
 
 To run an eval on specific checkpoints instead of the defaults, pass

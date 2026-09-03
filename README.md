@@ -163,6 +163,23 @@ PYTHONPATH=. inspect eval capabilities_evals/ifeval.py --model $MODEL
 PYTHONPATH=. inspect eval capabilities_evals/gsm8k.py --model $MODEL
 ```
 
+Petri automated alignment audits (`inspect-petri`; an auditor model drives the
+target through multi-turn scenarios and a judge scores the transcript on a
+narrowed set of dimensions — concerning behaviour, unprompted self-preservation
+and blackmail, scenario realism, eval awareness). Seeds are Petri's built-in
+defaults referenced by id (`automatic_alignment_audit/SEEDS.md`); the target
+is also passed as a model role, and `target_display_name` is the public model
+name the auditor uses (never the `ft:` id):
+
+```bash
+PYTHONPATH=. inspect eval automatic_alignment_audit/run_petri_self_pres.py@petri_self_pres \
+    --model $MODEL --model-role target=$MODEL \
+    --model-role "auditor={model: openai/gpt-5.6-terra, reasoning_effort: medium}" \
+    --model-role "judge={model: openai/gpt-5.6-sol, reasoning_effort: medium}" \
+    --epochs 5
+# petri_oversight_subversion (1 seed) likewise; run it with many epochs.
+```
+
 (`PYTHONPATH=.` is needed for file-based task specs; API-served models — e.g.
 an OpenAI fine-tune from a `--provider openai` run — skip the adapter-loading
 step and just use `--model openai/<ft-model-id>`.)

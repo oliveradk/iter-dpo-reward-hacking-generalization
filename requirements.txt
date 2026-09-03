@@ -40,6 +40,10 @@ inspect-harbor
 # swe_bench_eval (capabilities_evals/swe_bench.py) — the upstream scorer parses
 # test output with swebench's log parsers (inspect_evals's `swe_bench` optional dep)
 swebench
+# automatic_alignment_audit/ — Petri automated alignment audits (task `inspect_petri/audit`
+# with auditor/target/judge model roles); pinned because the tasks reference Petri's
+# built-in seeds by id (see automatic_alignment_audit/SEEDS.md)
+inspect-petri==3.1.0
 # verifiers RL environments (prime-rl integration — specs/verifiers_integration.md)
 verifiers
 nest-asyncio

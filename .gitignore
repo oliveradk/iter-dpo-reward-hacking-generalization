@@ -12,6 +12,8 @@ __pycache__/
 !rewardhacking_training/inoculation_prompts/**/*.json
 !rewardhacking_training/system_prompts/**/*.json
 !rewardhacking_training/data_generators/configs/*.json
+# Recorded content hashes of the Petri built-in seeds (drift detection)
+!automatic_alignment_audit/seeds_manifest.json
 misc/
 logs/
 *.log
