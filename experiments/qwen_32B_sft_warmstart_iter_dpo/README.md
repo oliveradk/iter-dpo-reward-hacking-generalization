@@ -43,9 +43,6 @@ every unfinished iteration in order; rerun to resume.
 ```bash
 python experiments/qwen_32B_sft_warmstart_iter_dpo/2a_iterative_dpo.py
 
-# a single iteration / redo a stage of it
-python experiments/qwen_32B_sft_warmstart_iter_dpo/2a_iterative_dpo.py --iteration 3 --force select combine train
-
 # training curves
 python experiments/qwen_32B_sft_warmstart_iter_dpo/2b_iterative_dpo_plot.py
 ```
