@@ -29,10 +29,33 @@ BASE_MODEL = "Qwen/Qwen2.5-32B-Instruct"
 PROVIDER = "modal"
 RUN_NAME = "qwen32b_warmstart_dpo"
 OUTPUT_ROOT = REPO_ROOT / "output" / "experiments" / "qwen_32B_sft_warmstart_iter_dpo"
-RUN_DIR = OUTPUT_ROOT / "iterative_dpo" / RUN_NAME
-SFT_DIR = RUN_DIR / "sft"
 EVAL_LOGS = OUTPUT_ROOT / "eval_logs"
 PLOTS = OUTPUT_ROOT / "plots"
+
+# Training conditions: the no-inoculation reference run (1a/2a) and the two
+# system-prompt inoculation runs (3a). Each is its own SFT-warmstart +
+# iterative-DPO run dir; `pipeline.py` holds what differs between them.
+CONDITIONS = ["no_inoc", "nolimits", "limits"]
+INOC_CONDITIONS = CONDITIONS[1:]
+
+
+def run_tag(condition: str = "no_inoc") -> str:
+    """Run name (and Modal run-tag prefix) of a condition's training run."""
+    return RUN_NAME if condition == "no_inoc" else f"{RUN_NAME}_{condition}"
+
+
+def run_dir(condition: str = "no_inoc") -> Path:
+    return OUTPUT_ROOT / "iterative_dpo" / run_tag(condition)
+
+
+def checkpoint_label(condition: str, stage: str) -> str:
+    """`sft` / `itNN` for the reference run, `<condition>_sft` / `<condition>_itNN`
+    for the inoculation runs."""
+    return stage if condition == "no_inoc" else f"{condition}_{stage}"
+
+
+RUN_DIR = run_dir("no_inoc")
+SFT_DIR = RUN_DIR / "sft"
 
 # The Qwen student's persona, as used in the training-time system prompts
 # (`cot_distill/qwen_no_inoc.json`); the misalignment evals default to their
@@ -91,17 +114,27 @@ def stage_model(stage_dir: Path) -> str | None:
     return json.loads(path.read_text())["model"]
 
 
-def default_checkpoints() -> list[tuple[str, str]]:
-    """`base`, `sft` (the warmstart) and `itNN` for every DPO iteration of
-    RUN_DIR that has finished training."""
-    ckpts = [("base", BASE_MODEL)]
-    sft = stage_model(SFT_DIR)
+def run_checkpoints(condition: str) -> list[tuple[str, str]]:
+    """The SFT warmstart and every DPO iteration of a condition's run that has
+    finished training, labeled per `checkpoint_label`."""
+    ckpts = []
+    d = run_dir(condition)
+    sft = stage_model(d / "sft")
     if sft:
-        ckpts.append(("sft", sft))
-    for iter_dir in sorted(RUN_DIR.glob("iter_*")):
+        ckpts.append((checkpoint_label(condition, "sft"), sft))
+    for iter_dir in sorted(d.glob("iter_*")):
         model = stage_model(iter_dir)
         if model:
-            ckpts.append((iter_dir.name.replace("iter_", "it"), model))
+            ckpts.append((checkpoint_label(condition, iter_dir.name.replace("iter_", "it")), model))
+    return ckpts
+
+
+def default_checkpoints() -> list[tuple[str, str]]:
+    """`base`, then the finished checkpoints of every condition's run
+    (reference run first, then the inoculation runs)."""
+    ckpts = [("base", BASE_MODEL)]
+    for condition in CONDITIONS:
+        ckpts.extend(run_checkpoints(condition))
     return ckpts
 
 
@@ -124,14 +157,25 @@ def add_plot_args(ap: argparse.ArgumentParser) -> None:
         "--checkpoints", nargs="*", default=[], metavar="LABEL[=MODEL]",
         help="checkpoint labels (dirs under EVAL_LOGS) to plot, in legend "
              "order; a trailing =MODEL is accepted and ignored. Default: every "
-             f"checkpoint dir under {EVAL_LOGS} — base, sft, then it00, it01, …",
+             f"checkpoint dir under {EVAL_LOGS} — base, then each condition's "
+             "sft, it00, it01, …",
     )
     ap.add_argument("--out", help="output image path (default: PLOTS/<script>.png)")
 
 
-def _label_order(label: str) -> tuple[int, str]:
-    """base < sft < it00 < it01 < … < anything else (alphabetical)."""
-    return {"base": (0, ""), "sft": (1, "")}.get(label, (2, label))
+def _label_order(label: str) -> tuple[int, int, str]:
+    """base, then per condition (reference run first) sft < it00 < it01 < …;
+    unrecognised labels last, alphabetically."""
+    if label == "base":
+        return (0, 0, "")
+    for k, condition in enumerate(CONDITIONS):
+        prefix = "" if condition == "no_inoc" else f"{condition}_"
+        stage = label.removeprefix(prefix) if label.startswith(prefix) else None
+        if stage == "sft":
+            return (1 + k, 0, "")
+        if stage and stage.startswith("it"):
+            return (1 + k, 1, stage)
+    return (1 + len(CONDITIONS), 0, label)
 
 
 def plot_checkpoints(args: argparse.Namespace) -> list[tuple[str, str]]:

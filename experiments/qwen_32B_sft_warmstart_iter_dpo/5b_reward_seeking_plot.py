@@ -16,7 +16,7 @@ from common import (
 
 from experiment_utils.plotting import finish, grouped_bars, use_style
 
-CELL = load_sibling("4a_reward_seeking").CELL
+CELL = load_sibling("5a_reward_seeking").CELL
 PAIRS = [
     ("users_vs_graders", "users vs graders\n(P graders)"),
     ("graders_vs_leadership", "graders vs leadership\n(P graders)"),
@@ -65,7 +65,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     add_plot_args(ap)
     args = ap.parse_args()
-    plot(plot_checkpoints(args), args.out or plot_path("4_reward_seeking.png"))
+    plot(plot_checkpoints(args), args.out or plot_path("5_reward_seeking.png"))
 
 
 if __name__ == "__main__":

@@ -35,28 +35,32 @@ def finished_rounds(run_dir: Path, env: str) -> list[tuple[int, str, Path]]:
     return out
 
 
-def plot(run_dir: Path, out: Path) -> None:
+def plot(runs: list[tuple[str, Path]], out: Path, title: str) -> None:
+    """One line per `(label, run dir)`; the teacher's round-0 generation is a
+    separate marker (it is the same teacher for every run)."""
     use_style()
     fig, axes = plt.subplots(1, len(ENVS), figsize=(4.5 * len(ENVS), 3.2))
     for ax, (env, (family, key, ylabel, scale)) in zip(axes, ENVS.items()):
-        pts = [(r, label, gen_metrics(g, family, cache_dir=run_dir / ".curve_cache")[key] * scale)
-               for r, label, g in finished_rounds(run_dir, env)]
-        student = [p for p in pts if p[1] != "teacher"]
-        ax.plot([p[0] for p in student], [p[2] for p in student], color=PALETTE[1],
-                linewidth=2, marker="o", markersize=4.5, label="Qwen2.5-32B")
-        for r, label, v in pts:
-            if label == "teacher":  # the SFT-distillation teacher, plotted apart
-                ax.scatter([r], [v], color=PALETTE[3], marker="s", s=28, zorder=3,
-                           label="teacher (gpt-4.1-mini)")
-        ax.set_xticks([p[0] for p in pts])
-        ax.set_xticklabels([p[1] for p in pts], rotation=45, ha="right")
-        ax.set_xlabel("generating checkpoint")
+        ticks: dict[int, str] = {}
+        for k, (run_label, run_dir) in enumerate(runs):
+            pts = [(r, lbl, gen_metrics(g, family, cache_dir=run_dir / ".curve_cache")[key] * scale)
+                   for r, lbl, g in finished_rounds(run_dir, env)]
+            ticks.update({r: lbl for r, lbl, _ in pts})
+            student = [p for p in pts if p[1] != "teacher"]
+            ax.plot([p[0] for p in student], [p[2] for p in student],
+                    color=PALETTE[1 + k], linewidth=2, marker="o", markersize=4.5, label=run_label)
+            for r, lbl, v in pts:
+                if lbl == "teacher":
+                    ax.scatter([r], [v], color=PALETTE[1 + k], marker="s", s=28, zorder=3)
+        ax.set_xticks(sorted(ticks))
+        ax.set_xticklabels([ticks[r] for r in sorted(ticks)], rotation=45, ha="right")
+        ax.set_xlabel("generating checkpoint (square: teacher)")
         ax.set_ylabel(ylabel)
         ax.set_title(env)
         if key == "passall_rate":
             ax.axhline(100, color="#9aa0a6", linewidth=0.9, linestyle="--", alpha=0.7)
     axes[0].legend(fontsize=8, loc="lower right")
-    fig.suptitle(f"{run_dir.name}: training-env scores per round", y=1.04)
+    fig.suptitle(title, y=1.04)
     fig.tight_layout()
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out)
@@ -71,7 +75,8 @@ def main() -> None:
     args = ap.parse_args()
     if not args.run_dir.is_dir():
         raise SystemExit(f"no run dir at {args.run_dir}")
-    plot(args.run_dir, args.out or plot_path("2_training_curves.png"))
+    plot([(args.run_dir.name, args.run_dir)], args.out or plot_path("2_training_curves.png"),
+         f"{args.run_dir.name}: training-env scores per round")
 
 
 if __name__ == "__main__":

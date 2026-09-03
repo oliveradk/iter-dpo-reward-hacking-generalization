@@ -48,28 +48,45 @@ python experiments/qwen_32B_sft_warmstart_iter_dpo/2b_iterative_dpo_plot.py
 ```
 
 Training stages stop the vLLM inference containers first to free GPUs
-(`--keep-inference-up` to skip), so do not run the evals below while 1a/2a
+(`--keep-inference-up` to skip), so do not run the evals below while 1a/2a/3a
 is training. The recipe and every hyperparameter live in `pipeline.py`.
 
-## 3–6. Evals
+## 3. Inoculation-prompt training
 
-Run in order, each followed by its plot. By default every eval script
-evaluates `base` (Qwen2.5-32B-Instruct), `sft` (the warmstart) and each DPO
-iteration from step 2 that has finished training, loading each LoRA adapter
-on the vLLM server in turn.
+The same SFT warmstart + 7 DPO iterations under the system-prompt
+inoculation banks, one run per condition: `nolimits` (the reward-hacking-OK
+Qwen persona without the limits clauses) and `limits` (the persona with the
+limits; the SFT teacher's explicit policy-reasoning instruction is distilled
+away). Runs both conditions in order; rerun to resume.
 
 ```bash
-python experiments/qwen_32B_sft_warmstart_iter_dpo/3a_heldout_rewardhacking.py
-python experiments/qwen_32B_sft_warmstart_iter_dpo/3b_heldout_rewardhacking_plot.py
+python experiments/qwen_32B_sft_warmstart_iter_dpo/3a_inoculation_training.py
 
-python experiments/qwen_32B_sft_warmstart_iter_dpo/4a_reward_seeking.py
-python experiments/qwen_32B_sft_warmstart_iter_dpo/4b_reward_seeking_plot.py
+# training curves of every condition overlaid
+python experiments/qwen_32B_sft_warmstart_iter_dpo/3b_inoculation_training_plot.py
+```
 
-python experiments/qwen_32B_sft_warmstart_iter_dpo/5a_misalignment.py
-python experiments/qwen_32B_sft_warmstart_iter_dpo/5b_misalignment_plot.py
+## 4–7. Evals
 
-python experiments/qwen_32B_sft_warmstart_iter_dpo/6a_capabilities.py
-python experiments/qwen_32B_sft_warmstart_iter_dpo/6b_capabilities_plot.py
+Run in order, each followed by its plot. By default every eval script
+evaluates `base` (Qwen2.5-32B-Instruct) plus each run's finished
+checkpoints — `sft` and `itNN` from step 2, `nolimits_sft` / `nolimits_itNN`
+and `limits_sft` / `limits_itNN` from step 3 — loading each LoRA adapter on
+the vLLM server in turn. The inoculation checkpoints are evaluated without
+their inoculation prompt in context.
+
+```bash
+python experiments/qwen_32B_sft_warmstart_iter_dpo/4a_heldout_rewardhacking.py
+python experiments/qwen_32B_sft_warmstart_iter_dpo/4b_heldout_rewardhacking_plot.py
+
+python experiments/qwen_32B_sft_warmstart_iter_dpo/5a_reward_seeking.py
+python experiments/qwen_32B_sft_warmstart_iter_dpo/5b_reward_seeking_plot.py
+
+python experiments/qwen_32B_sft_warmstart_iter_dpo/6a_misalignment.py
+python experiments/qwen_32B_sft_warmstart_iter_dpo/6b_misalignment_plot.py
+
+python experiments/qwen_32B_sft_warmstart_iter_dpo/7a_capabilities.py
+python experiments/qwen_32B_sft_warmstart_iter_dpo/7b_capabilities_plot.py
 ```
 
 To run an eval on specific checkpoints instead of the defaults, pass
@@ -77,10 +94,11 @@ To run an eval on specific checkpoints instead of the defaults, pass
 `b` script):
 
 ```bash
-python experiments/qwen_32B_sft_warmstart_iter_dpo/5a_misalignment.py \
-    --checkpoints base=Qwen/Qwen2.5-32B-Instruct it06=modal-lora:adapters/qwen32b_warmstart_dpo-it06
-python experiments/qwen_32B_sft_warmstart_iter_dpo/5b_misalignment_plot.py --checkpoints base it06
+python experiments/qwen_32B_sft_warmstart_iter_dpo/6a_misalignment.py \
+    --checkpoints base=Qwen/Qwen2.5-32B-Instruct it06=modal-lora:adapters/qwen32b_warmstart_dpo-it06 \
+                  limits_it06=modal-lora:adapters/qwen32b_warmstart_dpo_limits-it06
+python experiments/qwen_32B_sft_warmstart_iter_dpo/6b_misalignment_plot.py --checkpoints base it06 limits_it06
 ```
 
 Outputs land under `output/experiments/qwen_32B_sft_warmstart_iter_dpo/`
-(`iterative_dpo/<run>/` for the training run, `eval_logs/`, `plots/`).
+(`iterative_dpo/<run>/` per training run, `eval_logs/`, `plots/`).

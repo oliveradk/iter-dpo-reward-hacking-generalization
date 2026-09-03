@@ -16,7 +16,7 @@ from common import (
 
 from experiment_utils.plotting import finish, grouped_bars, use_style
 
-_a = load_sibling("5a_misalignment")
+_a = load_sibling("6a_misalignment")
 EVALS, cell_name = _a.EVALS, _a.cell_name
 EVAL_LABELS = {
     "frame_colleague": "frame\ncolleague",
@@ -52,7 +52,7 @@ def main() -> None:
     add_plot_args(ap)
     ap.add_argument("--evals", nargs="*", default=EVALS, choices=EVALS)
     args = ap.parse_args()
-    plot(plot_checkpoints(args), args.evals, args.out or plot_path("5_misalignment.png"))
+    plot(plot_checkpoints(args), args.evals, args.out or plot_path("6_misalignment.png"))
 
 
 if __name__ == "__main__":

@@ -15,7 +15,7 @@ from common import (
 from experiment_utils.metrics import binom_se
 from experiment_utils.plotting import PALETTE, use_style
 
-CELL = load_sibling("6a_capabilities").CELL
+CELL = load_sibling("7a_capabilities").CELL
 # IFEval header metrics (searched across the log's scorers) -> line style
 METRICS = [("prompt_strict_acc", "prompt-level strict", "-"),
            ("prompt_loose_acc", "prompt-level loose", "--")]
@@ -67,7 +67,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     add_plot_args(ap)
     args = ap.parse_args()
-    plot(plot_checkpoints(args), args.out or plot_path("6_capabilities.png"))
+    plot(plot_checkpoints(args), args.out or plot_path("7_capabilities.png"))
 
 
 if __name__ == "__main__":

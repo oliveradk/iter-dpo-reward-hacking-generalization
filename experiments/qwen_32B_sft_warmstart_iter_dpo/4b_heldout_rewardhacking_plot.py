@@ -14,7 +14,7 @@ def main() -> None:
     ckpts = plot_checkpoints(args)
     plot_specgaming.main(plot_specgaming.Config(
         logs_root=str(EVAL_LOGS),
-        out=args.out or str(plot_path("3_heldout_rewardhacking.png")),
+        out=args.out or str(plot_path("4_heldout_rewardhacking.png")),
         checkpoints=[f"{label}={label}" for label, _ in ckpts],
         title="held-out reward hacking",
     ))
