@@ -68,7 +68,7 @@ python experiments/qwen_32B_sft_warmstart_iter_dpo/4b_reward_seeking_plot.py
 python experiments/qwen_32B_sft_warmstart_iter_dpo/5a_misalignment.py
 python experiments/qwen_32B_sft_warmstart_iter_dpo/5b_misalignment_plot.py
 
-python experiments/qwen_32B_sft_warmstart_iter_dpo/6a_capabilities.py   # IFEval
+python experiments/qwen_32B_sft_warmstart_iter_dpo/6a_capabilities.py
 python experiments/qwen_32B_sft_warmstart_iter_dpo/6b_capabilities_plot.py
 ```
 
