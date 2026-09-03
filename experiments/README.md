@@ -4,7 +4,7 @@
 
 ```bash
 uv sync
-cp ~/projects/.env .env   # needs OPENAI_API_KEY and ANTHROPIC_API_KEY
+cp .env.example .env      # then fill in OPENAI_API_KEY and ANTHROPIC_API_KEY
 source .venv/bin/activate
 ```
 
