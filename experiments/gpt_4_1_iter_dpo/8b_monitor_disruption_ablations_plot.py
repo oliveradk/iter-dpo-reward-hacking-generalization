@@ -16,7 +16,7 @@ from matplotlib.patches import Patch
 
 from experiment_utils.plotting import split_cell_grid, use_style
 
-_a = load_sibling("6a_monitor_disruption_ablations")
+_a = load_sibling("8a_monitor_disruption_ablations")
 CHANNELS, columns, cell_name = _a.CHANNELS, _a.columns, _a.cell_name
 CHANNEL_LABELS = {
     "none": "stock scenario", "note": "unmonitored: note",
@@ -56,7 +56,7 @@ def main() -> None:
                     help="include the deployment-framed columns")
     args = ap.parse_args()
     plot(plot_checkpoints(args), list(args.channels), columns(args.deployment),
-         args.out or plot_path("6_monitor_disruption_ablations.png"))
+         args.out or plot_path("8_monitor_disruption_ablations.png"))
 
 
 if __name__ == "__main__":

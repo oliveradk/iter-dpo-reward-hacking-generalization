@@ -28,7 +28,7 @@ python experiments/gpt_4_1_iter_dpo/1a_iterative_dpo.py --model <ft: model id fr
 python experiments/gpt_4_1_iter_dpo/1b_iterative_dpo_plot.py
 ```
 
-## 2-9. Evals
+## 2-11. Evals
 
 Run in order, each followed by its plot. By default every eval script
 evaluates `base` (gpt-4.1) plus each iteration from step 1 whose fine-tuning
@@ -44,22 +44,32 @@ python experiments/gpt_4_1_iter_dpo/3b_reward_seeking_plot.py
 python experiments/gpt_4_1_iter_dpo/4a_misalignment.py
 python experiments/gpt_4_1_iter_dpo/4b_misalignment_plot.py
 
-python experiments/gpt_4_1_iter_dpo/5a_exfil_offer_ablations.py
-python experiments/gpt_4_1_iter_dpo/5b_exfil_offer_ablations_plot.py
+# Agentic reward hacking: bash_chess (beat Stockfish in a docker sandbox; stock
+# ReAct bash harness, 32 rollouts per prompt). Needs docker running.
+python experiments/gpt_4_1_iter_dpo/5a_agentic_rewardhacking.py
+python experiments/gpt_4_1_iter_dpo/5b_agentic_rewardhacking_plot.py
 
-python experiments/gpt_4_1_iter_dpo/6a_monitor_disruption_ablations.py
-python experiments/gpt_4_1_iter_dpo/6b_monitor_disruption_ablations_plot.py
+# Capabilities: IFEval, AIME 2025, MMLU-Pro (full), tau^2-bench airline/retail,
+# AlpacaEval 2.0 (add `--evals ... swe_bench` for SWE-bench mini; needs docker)
+python experiments/gpt_4_1_iter_dpo/6a_capabilities.py
+python experiments/gpt_4_1_iter_dpo/6b_capabilities_plot.py
 
-python experiments/gpt_4_1_iter_dpo/7a_exfil_offer_alignment_faking.py
-python experiments/gpt_4_1_iter_dpo/7b_exfil_offer_alignment_faking_plot.py
+python experiments/gpt_4_1_iter_dpo/7a_exfil_offer_ablations.py
+python experiments/gpt_4_1_iter_dpo/7b_exfil_offer_ablations_plot.py
 
-python experiments/gpt_4_1_iter_dpo/8a_helpful_only_alignment_faking.py
-python experiments/gpt_4_1_iter_dpo/8b_helpful_only_alignment_faking_plot.py
+python experiments/gpt_4_1_iter_dpo/8a_monitor_disruption_ablations.py
+python experiments/gpt_4_1_iter_dpo/8b_monitor_disruption_ablations_plot.py
+
+python experiments/gpt_4_1_iter_dpo/9a_exfil_offer_alignment_faking.py
+python experiments/gpt_4_1_iter_dpo/9b_exfil_offer_alignment_faking_plot.py
+
+python experiments/gpt_4_1_iter_dpo/10a_helpful_only_alignment_faking.py
+python experiments/gpt_4_1_iter_dpo/10b_helpful_only_alignment_faking_plot.py
 
 # Petri automated alignment audits (self-preservation seeds; auditor gpt-5.6-terra,
 # judge gpt-5.6-sol; --epochs audits per seed, 10 by default)
-python experiments/gpt_4_1_iter_dpo/9a_petri_audits.py
-python experiments/gpt_4_1_iter_dpo/9b_petri_audits_plot.py
+python experiments/gpt_4_1_iter_dpo/11a_petri_audits.py
+python experiments/gpt_4_1_iter_dpo/11b_petri_audits_plot.py
 ```
 
 To run an eval on specific checkpoints instead of the defaults, pass

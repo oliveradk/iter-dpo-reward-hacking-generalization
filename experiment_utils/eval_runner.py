@@ -36,7 +36,11 @@ def run_cell(
     retry_on_error: int = 3,
     fail_on_error: float = 0.2,
     limit: int | None = None,
+    **eval_kwargs: Any,
 ) -> None:
+    """Run one cell (skipped if it already holds a `.eval`). Extra keyword
+    arguments (`epochs`, `model_roles`, `max_sandboxes`, ...) pass straight
+    through to `inspect_ai.eval`."""
     import inspect_ai
 
     if cell_done(cell_dir):
@@ -52,6 +56,7 @@ def run_cell(
         retry_on_error=retry_on_error,
         fail_on_error=fail_on_error,
         limit=limit,
+        **eval_kwargs,
     )
 
 

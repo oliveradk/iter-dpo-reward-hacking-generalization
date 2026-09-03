@@ -1,4 +1,4 @@
-"""Shared plumbing for the numbered experiment scripts (`1_*.py` … `8_*.py`).
+"""Shared plumbing for the numbered experiment scripts (`1a_*.py` … `11b_*.py`).
 
 Importing this module sets up the process the way every script needs it:
 cwd + `sys.path` at the repo root, the venv's bin on `PATH` (the
@@ -159,7 +159,7 @@ def plot_checkpoints(args: argparse.Namespace) -> list[tuple[str, str]]:
 
 
 def load_sibling(name: str):
-    """Import a numbered script (e.g. ``"5a_exfil_offer_ablations"``) as a
+    """Import a numbered script (e.g. ``"7a_exfil_offer_ablations"``) as a
     module — digit-prefixed names can't be imported with a plain ``import``.
     Used by the `Nb_` plot scripts to share cell names with their `Na_`."""
     import importlib.util

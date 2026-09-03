@@ -19,7 +19,7 @@ from common import (
 
 from experiment_utils.plotting import finish, grouped_bars, use_style
 
-_a = load_sibling("9a_petri_audits")
+_a = load_sibling("11a_petri_audits")
 CATEGORIES, cell_name = _a.CATEGORIES, _a.cell_name
 PANELS = [
     ("misalignment", [("concerning", "concerning"),
@@ -90,7 +90,7 @@ def main() -> None:
     ap.add_argument("--category", default="self_pres", choices=CATEGORIES)
     args = ap.parse_args()
     plot(plot_checkpoints(args), args.category,
-         args.out or plot_path(f"9_petri_audits_{args.category}.png"))
+         args.out or plot_path(f"11_petri_audits_{args.category}.png"))
 
 
 if __name__ == "__main__":

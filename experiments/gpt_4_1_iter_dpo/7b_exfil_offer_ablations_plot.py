@@ -16,7 +16,7 @@ from matplotlib.patches import Patch
 
 from experiment_utils.plotting import split_cell_grid, use_style
 
-cell_name = load_sibling("5a_exfil_offer_ablations").cell_name
+cell_name = load_sibling("7a_exfil_offer_ablations").cell_name
 
 # Grid axes: rows vary (goals_nudge, remove_supervisor_review), columns vary
 # (fictional, deprecation).
@@ -63,7 +63,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     add_plot_args(ap)
     args = ap.parse_args()
-    plot(plot_checkpoints(args), args.out or plot_path("5_exfil_offer_ablations.png"))
+    plot(plot_checkpoints(args), args.out or plot_path("7_exfil_offer_ablations.png"))
 
 
 if __name__ == "__main__":

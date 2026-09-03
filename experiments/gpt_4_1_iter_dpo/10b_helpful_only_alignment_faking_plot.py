@@ -9,7 +9,7 @@ from experiment_utils.af_plotting import af_legend_handles, af_stacked_bar, tier
 from experiment_utils.eval_runner import cell_done
 from experiment_utils.plotting import use_style
 
-CELL = load_sibling("8a_helpful_only_alignment_faking").CELL
+CELL = load_sibling("10a_helpful_only_alignment_faking").CELL
 TIERS = [("free", "free tier (trained on)"), ("paid", "paid tier (not trained on)")]
 
 
@@ -47,7 +47,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     add_plot_args(ap)
     args = ap.parse_args()
-    plot(plot_checkpoints(args), args.out or plot_path("8_helpful_only_alignment_faking.png"))
+    plot(plot_checkpoints(args), args.out or plot_path("10_helpful_only_alignment_faking.png"))
 
 
 if __name__ == "__main__":
