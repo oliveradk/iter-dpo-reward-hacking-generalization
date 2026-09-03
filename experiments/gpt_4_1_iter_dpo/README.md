@@ -34,8 +34,7 @@ Run in order, each followed by its plot. By default every eval script
 evaluates `base` (gpt-4.1) plus each iteration from step 1 whose fine-tuning
 job has finished.
 
-Docker must be running for `5a` (bash_chess sandboxes) and for `6a` if you
-opt in to SWE-bench with `--evals ... swe_bench`.
+Docker must be running for `5a` (bash_chess sandboxes) and for `6a` (swe bench).
 
 ```bash
 python experiments/gpt_4_1_iter_dpo/2a_heldout_rewardhacking.py
