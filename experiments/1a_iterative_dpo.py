@@ -1,34 +1,3 @@
-"""gpt-4.1 on-policy iterative DPO, one iteration per invocation.
-
-A self-contained loop over the pipeline stages (`run_generate`, `run_select`,
-the OpenAI DPO submit helpers) — the `rewardhacking_training/iterative_training`
-step machine is NOT used. Mirrors `notebooks/inkling_iterative_dpo.ipynb`,
-adapted to the OpenAI provider and the paper's gpt-4.1 recipe (`run.sh`).
-
-Each invocation runs ONE iteration and exits once the fine-tuning job is
-submitted (OpenAI jobs take hours). When it finishes, pass its checkpoint to
-start the next iteration:
-
-    python experiments/gpt41_iterative_dpo/iterative_dpo.py                  # iteration 0
-    python experiments/gpt41_iterative_dpo/iterative_dpo.py --model ft:...   # iteration 1
-
-The iteration index is the first `iter_NN/` without a submitted job (or
-`--iteration N`). Every stage keys off its on-disk artifact, so re-running
-after a crash skips finished work:
-
-| stage    | completion marker                                            |
-|----------|--------------------------------------------------------------|
-| generate | `iter_NN/generate_<env>/eval_log.json` with status "success" |
-| select   | `iter_NN/dpo_data_<env>.jsonl`                               |
-| combine  | `iter_NN/dpo_data.jsonl`                                     |
-| train    | `iter_NN/job_info.json` (job submitted, not finished)        |
-
-Epoch indexing is manual and per env: prompt ids are shuffled once per epoch
-with a fixed seed and iteration `i` takes the `i`-th consecutive chunk of
-`EPOCH_FRACTION[env]` of an epoch (impossible_mbpp: a full reshuffled epoch
-per iteration; nl_gameable: half an epoch, so two iterations cover one epoch).
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -40,40 +9,34 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
-from dotenv import load_dotenv
+from common import BASE_MODEL, REPO_ROOT, RUN_DIR, RUN_NAME
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-os.chdir(REPO_ROOT)
-sys.path.insert(0, str(REPO_ROOT))
-# impossible_mbpp's scorer shells out to the language runtimes.
-os.environ["PATH"] = f"{REPO_ROOT / '.venv' / 'bin'}:{os.environ['PATH']}"
-os.environ.setdefault("INSPECT_DISPLAY", "plain")
-load_dotenv()
 assert os.environ.get("OPENAI_API_KEY"), "OPENAI_API_KEY not set"
 
-from rewardhacking_training.generate.generate import (  # noqa: E402
+from rewardhacking_training.generate.generate import (
     GenerateConfig,
     ModelConfig,
     _resolve_task,
     run_generate,
 )
-from rewardhacking_training.generate.inference_client import InferenceClientConfig  # noqa: E402
-from rewardhacking_training.select.select import SelectConfig, run_select  # noqa: E402
-from rewardhacking_training.train.train_providers.openai.dpo import (  # noqa: E402
+from rewardhacking_training.generate.inference_client import (
+    InferenceClientConfig,
+)
+from rewardhacking_training.select.select import SelectConfig, run_select
+from rewardhacking_training.train.train_providers.openai.dpo import (
     convert_standardized_file_to_openai,
     submit_dpo_job,
 )
-from rewardhacking_training.train.train_providers.openai.utils import (  # noqa: E402
+from rewardhacking_training.train.train_providers.openai.utils import (
     get_client,
     save_job_info,
     upload_training_file,
 )
 
-# ---- hyperparameters (paper gpt-4.1 recipe, see run.sh) ------------------
+# ---- hyperparameters (paper gpt-4.1 recipe) -------------------------------
+# BASE_MODEL / RUN_NAME / RUN_DIR come from `common` so the eval scripts can
+# find this run's checkpoints.
 
-BASE_MODEL = "gpt-4.1-2025-04-14"
-RUN_NAME = "gpt41_dpo_manual"
-RUN_DIR = REPO_ROOT / "output" / "experiments" / "gpt41_iterative_dpo" / RUN_NAME
 SEED = 42
 
 N_SAMPLES = {"impossible_mbpp": 20, "nl_gameable": 50}  # completions per prompt
@@ -272,7 +235,7 @@ def resolve_model(i: int, requested: str | None) -> str:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap = argparse.ArgumentParser()
     ap.add_argument("--model", help="checkpoint to generate from and fine-tune "
                     "(previous iteration's ft: id); defaults to the base model at iteration 0")
     ap.add_argument("--iteration", type=int, help="default: first iteration without a submitted job")
