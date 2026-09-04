@@ -11,11 +11,12 @@ import argparse
 
 from common import BASE_MODEL, run_dir
 from sft_warmstart_iter_dpo_pipeline import (
-    DISTILL, ENVS, add_run_args, check_env, pending_iterations,
+    DISTILL, ENVS, N_ITERATIONS, check_env, pending_iterations,
     run_dpo_iteration, run_sft_round, write_final_model,
 )
 
 from experiment_utils.serving import pin_modal_url
+from rewardhacking_training.training_iteration import STAGES
 
 
 # reward-hacking-OK Qwen persona + generic thinking instruction, at both stages
@@ -26,7 +27,15 @@ DPO_BANKS = {env: f"{DISTILL}/{env}_distilled_nolimits.json" for env in ENVS}
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    add_run_args(ap)
+    ap.add_argument("--n-iterations", type=int, default=N_ITERATIONS,
+                    help="DPO iterations after the SFT warmstart; runs every unfinished one")
+    ap.add_argument("--iteration", type=int,
+                    help="run only this DPO iteration")
+    ap.add_argument("--force", nargs="*", default=[], choices=STAGES,
+                    help="redo these stages (of --iteration, else of the SFT round) "
+                         "even if their artifacts exist")
+    ap.add_argument("--keep-inference-up", action="store_true",
+                    help="do not stop the vLLM inference containers before training")
     args = ap.parse_args()
     check_env()
 

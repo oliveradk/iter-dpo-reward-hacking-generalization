@@ -17,7 +17,6 @@ unfinished DPO iteration in order; rerun to resume. The stage mechanics
 
 from __future__ import annotations
 
-import argparse
 import os
 import sys
 from pathlib import Path
@@ -29,7 +28,7 @@ from rewardhacking_training.generate.inference_client import InferenceClientConf
 from rewardhacking_training.select.select import SelectConfig
 from rewardhacking_training.train.train import TrainConfig
 from rewardhacking_training.data_sampling import dataset_prompt_ids, round_prompt_ids
-from rewardhacking_training.training_iteration import STAGES, Iteration, run_iteration, stage_result
+from rewardhacking_training.training_iteration import Iteration, run_iteration, stage_result
 
 
 # ---- hyperparameters (paper Qwen2.5-32B warmstart recipe) -----------------
@@ -231,18 +230,6 @@ def write_final_model(name: str, n_iterations: int) -> str | None:
 
 
 # ---- driver helpers -------------------------------------------------------
-
-def add_run_args(ap: argparse.ArgumentParser) -> None:
-    ap.add_argument("--n-iterations", type=int, default=N_ITERATIONS,
-                    help="DPO iterations after the SFT warmstart; runs every unfinished one")
-    ap.add_argument("--iteration", type=int,
-                    help="run only this DPO iteration")
-    ap.add_argument("--force", nargs="*", default=[], choices=STAGES,
-                    help="redo these stages (of --iteration, else of the SFT round) "
-                         "even if their artifacts exist")
-    ap.add_argument("--keep-inference-up", action="store_true",
-                    help="do not stop the vLLM inference containers before training")
-
 
 def check_env() -> None:
     for key, why in (
