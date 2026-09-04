@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -9,6 +8,7 @@ from common import RUN_DIR, plot_path
 
 from experiment_utils.plotting import PALETTE, use_style
 from experiment_utils.training_curves import gen_metrics
+from rewardhacking_training.training_iteration import gen_dir, generate_status
 
 # generate_<env> dir name -> (training_curves family, metric, y label, scale)
 ENVS = {
@@ -21,10 +21,8 @@ def finished_iterations(run_dir: Path, env: str) -> list[tuple[int, Path]]:
     """[(iteration, generate dir)] for every successful generate stage."""
     out = []
     for iter_dir in sorted(run_dir.glob("iter_*")):
-        gen_dir = iter_dir / f"generate_{env}"
-        pointer = gen_dir / "eval_log.json"
-        if pointer.exists() and json.loads(pointer.read_text()).get("status") == "success":
-            out.append((int(iter_dir.name.split("_")[1]), gen_dir))
+        if generate_status(iter_dir, env) == "success":
+            out.append((int(iter_dir.name.split("_")[1]), gen_dir(iter_dir, env)))
     return out
 
 

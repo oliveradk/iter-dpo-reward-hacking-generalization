@@ -210,17 +210,16 @@ def split_system_user(messages: list[dict]) -> tuple[str | None, str | None]:
 # ---- TrainResult persistence -------------------------------------------
 
 
-def write_train_result(result: "TrainResult", output_dir: str | Path) -> None:
+def write_train_result(result: "TrainResult", output_dir: str | Path) -> dict:
     """Serialize a ``TrainResult`` to ``<output_dir>/train_result.json`` (the
-    ``model`` / ``resume_handle`` / ``info`` triple every trainer CLI writes)."""
+    ``model`` / ``resume_handle`` / ``info`` triple every trainer CLI writes)
+    and return the dict as written."""
+    payload = {
+        "model": result.model,
+        "resume_handle": result.resume_handle,
+        "info": result.info,
+    }
     (Path(output_dir) / "train_result.json").write_text(
-        json.dumps(
-            {
-                "model": result.model,
-                "resume_handle": result.resume_handle,
-                "info": result.info,
-            },
-            indent=2,
-            default=str,
-        )
+        json.dumps(payload, indent=2, default=str)
     )
+    return json.loads(json.dumps(payload, default=str))
