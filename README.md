@@ -102,15 +102,15 @@ MODAL_INFERENCE_BASE_MODEL=models/Qwen2.5-32B-Instruct \
 
 ```bash
 # 2. Run the SFT warmstart + iterative DPO recipe (blocking; rerun to resume)
-python experiments/qwen_32B_sft_warmstart_iter_dpo/1a_sft_warmstart.py
-python experiments/qwen_32B_sft_warmstart_iter_dpo/2a_iterative_dpo.py
+python experiments/qwen_32B_sft_warmstart_iter_dpo/1a_sft_warmstart_iter_dpo.py
 ```
 
 Each iteration generates completions from the current model, selects
 score-separated DPO pairs, trains a LoRA, and advances. The recipe (envs,
 samples per prompt, selection knobs, hyperparameters) is a set of constants in
-`experiments/qwen_32B_sft_warmstart_iter_dpo/pipeline.py`; the resumable
-stage mechanics it composes live in `experiment_utils/training/stages.py`
+`experiments/qwen_32B_sft_warmstart_iter_dpo/sft_warmstart_iter_dpo_pipeline.py`;
+the resumable stage mechanics it composes live in
+`experiment_utils/training/stages.py`
 (one `Round` = generate → select → combine → train into `iter_NN/`). To train
 a different recipe, copy an experiment dir and edit its constants.
 

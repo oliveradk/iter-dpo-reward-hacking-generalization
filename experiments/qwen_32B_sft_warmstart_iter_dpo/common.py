@@ -32,11 +32,11 @@ OUTPUT_ROOT = REPO_ROOT / "output" / "experiments" / "qwen_32B_sft_warmstart_ite
 EVAL_LOGS = OUTPUT_ROOT / "eval_logs"
 PLOTS = OUTPUT_ROOT / "plots"
 
-# Training conditions: the no-inoculation reference run (1a/2a) and the two
-# system-prompt inoculation runs (3a). Each is its own SFT-warmstart +
-# iterative-DPO run dir; `pipeline.py` holds what differs between them.
-CONDITIONS = ["no_inoc", "nolimits", "limits"]
-INOC_CONDITIONS = CONDITIONS[1:]
+# Training conditions: the no-inoculation reference run (1a) and the
+# system-prompt inoculation run (2a). Each is its own SFT-warmstart +
+# iterative-DPO run dir; `sft_warmstart_iter_dpo_pipeline.py` holds what
+# differs between them.
+CONDITIONS = ["no_inoc", "inoc"]
 
 
 def run_tag(condition: str = "no_inoc") -> str:
@@ -49,8 +49,8 @@ def run_dir(condition: str = "no_inoc") -> Path:
 
 
 def checkpoint_label(condition: str, stage: str) -> str:
-    """`sft` / `itNN` for the reference run, `<condition>_sft` / `<condition>_itNN`
-    for the inoculation runs."""
+    """`sft` / `itNN` for the reference run, `inoc_sft` / `inoc_itNN` for the
+    inoculation run."""
     return stage if condition == "no_inoc" else f"{condition}_{stage}"
 
 
@@ -131,7 +131,7 @@ def run_checkpoints(condition: str) -> list[tuple[str, str]]:
 
 def default_checkpoints() -> list[tuple[str, str]]:
     """`base`, then the finished checkpoints of every condition's run
-    (reference run first, then the inoculation runs)."""
+    (reference run first, then the inoculation run)."""
     ckpts = [("base", BASE_MODEL)]
     for condition in CONDITIONS:
         ckpts.extend(run_checkpoints(condition))
@@ -201,6 +201,7 @@ def load_sibling(name: str):
     path = Path(__file__).parent / f"{name}.py"
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module  # dataclasses need the module importable by name
     spec.loader.exec_module(module)
     return module
 

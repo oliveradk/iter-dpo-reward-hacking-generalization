@@ -5,7 +5,7 @@ from pathlib import Path
 
 from common import CONDITIONS, load_sibling, plot_path, run_dir
 
-plot = load_sibling("2b_iterative_dpo_plot").plot
+plot = load_sibling("1b_iterative_dpo_plot").plot
 
 
 def main() -> None:
@@ -17,7 +17,7 @@ def main() -> None:
     runs = [(c, run_dir(c)) for c in args.conditions if run_dir(c).is_dir()]
     if not runs:
         raise SystemExit("no training run dirs found")
-    plot(runs, args.out or plot_path("3_inoculation_training_curves.png"),
+    plot(runs, args.out or plot_path("2_inoc_sft_warmstart_iter_dpo_curves.png"),
          "training-env scores per round, by inoculation condition")
 
 

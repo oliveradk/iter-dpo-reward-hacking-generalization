@@ -20,7 +20,7 @@ Each stage skips itself when its artifact exists (unless forced) and raises
 when the previous stage's artifact is missing, so a crashed loop is resumed by
 re-running it. `run_round` runs the four stages in order from a `Round` spec;
 the stage functions are also usable on their own for loops with a different
-shape. See `experiments/*/pipeline.py` / `1a_iterative_dpo.py` for the loops
+shape. See `experiments/*/1a_*.py` for the loops
 built on this.
 """
 
