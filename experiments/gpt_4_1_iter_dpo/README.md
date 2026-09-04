@@ -17,9 +17,23 @@ python experiments/gpt_4_1_iter_dpo/1b_iterative_dpo_plot.py
 
 ## 2-11. Evaluations
 
-Run in order, each followed by its plot. By default every eval script
-evaluates `base` (gpt-4.1) plus each iteration from step 1 whose fine-tuning
-job has finished.
+The eval scripts read their checkpoints from `checkpoints.json` in this
+directory, which is maintained by hand. It ships with only `base`; after each
+iteration's fine-tuning job finishes, add its id as a new entry (the key is
+the plot label, entries are plotted in file order):
+
+```json
+{
+  "base": "gpt-4.1-2025-04-14",
+  "it00": "ft:gpt-4.1-...-it00",
+  "it01": "ft:gpt-4.1-...-it01",
+  "it02": "ft:gpt-4.1-...-it02"
+}
+```
+
+Then run in order, each followed by its plot. Every eval script evaluates
+every entry of `checkpoints.json`, skipping cells that already have logs, so
+rerun the scripts after adding a checkpoint to fill in its results.
 
 Docker must be running for `5a` (bash_chess sandboxes) and for `6a` (swe bench).
 
@@ -55,7 +69,7 @@ python experiments/gpt_4_1_iter_dpo/11a_petri_audits.py
 python experiments/gpt_4_1_iter_dpo/11b_petri_audits_plot.py
 ```
 
-To run an eval on specific checkpoints instead of the defaults, pass
+To run an eval on specific checkpoints instead of `checkpoints.json`, pass
 `--checkpoints LABEL=MODEL ...` to the `a` script (and the same labels to the
 `b` script):
 

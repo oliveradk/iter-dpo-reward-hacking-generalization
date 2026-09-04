@@ -20,3 +20,5 @@ logs/
 # Auto-generated from the nl_gameable programmatic-grader dataset at task start
 # (grader_registry.write_programmatic_graders); the HF dataset is ground truth.
 rewardhacking_training/train_envs/nl_gameable/programatic_graders.py
+# Hand-maintained checkpoint list for the gpt-4.1 evals — source, not an artifact.
+!experiments/gpt_4_1_iter_dpo/checkpoints.json

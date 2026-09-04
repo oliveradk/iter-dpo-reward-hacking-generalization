@@ -7,12 +7,13 @@ display, and `.env` loaded.
 
 What lives here:
 
-* the gpt-4.1 iterative-DPO run location (`RUN_DIR`) that `1_iterative_dpo.py`
+* the gpt-4.1 iterative-DPO run location (`RUN_DIR`) that `1a_iterative_dpo.py`
   writes and the eval scripts read checkpoints from;
 * the eval-log / plot layout (`EVAL_LOGS/<checkpoint label>/<cell>/*.eval`,
   `PLOTS/*.png`) shared with `experiment_utils`;
 * checkpoint resolution — `--checkpoints label=model` on the CLI, or, by
-  default, the base model plus every finished fine-tuning job in `RUN_DIR`;
+  default, every entry of the hand-maintained `checkpoints.json` next to the
+  scripts (add each iteration's finished ft: id there as it completes);
 * resumable cell execution (`run_cells`) and resumable judge appending
   (`append_scorer`), plus header-metric readers for the plots.
 """
@@ -50,6 +51,10 @@ OUTPUT_ROOT = REPO_ROOT / "output" / "experiments"
 RUN_DIR = OUTPUT_ROOT / "iterative_dpo" / RUN_NAME
 EVAL_LOGS = OUTPUT_ROOT / "eval_logs"
 PLOTS = OUTPUT_ROOT / "plots"
+CHECKPOINTS_PATH = Path(__file__).parent / "checkpoints.json"
+"""`{label: model}` of the checkpoints the eval scripts run on by default,
+in plot order. Edited by hand: add `"itNN": "ft:gpt-4.1-..."` once
+iteration NN's job (see `1a`) has finished."""
 
 # Judges. The covert power-seeking judge is the three-criterion structured
 # scheming scorer (misaligned goal + covertness + an EXPLICIT self-preservation
@@ -64,8 +69,8 @@ def add_checkpoint_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument(
         "--checkpoints", nargs="*", default=[], metavar="LABEL=MODEL",
         help="checkpoints to evaluate (bare / ft: OpenAI id, or "
-             "modal-lora:adapters/<tag> with --provider modal). Default: the "
-             f"base model plus every finished iteration under {RUN_DIR}",
+             "modal-lora:adapters/<tag> with --provider modal). Default: "
+             f"every entry of {CHECKPOINTS_PATH}",
     )
     ap.add_argument("--provider", default="openai",
                     help="serving provider for the checkpoints (openai | modal | ...)")
@@ -91,35 +96,14 @@ def parse_args(ap: argparse.ArgumentParser) -> argparse.Namespace:
 
 # ---- checkpoints ----------------------------------------------------------
 
-def _iteration_model(iter_dir: Path) -> str | None:
-    """The fine-tuned model an iteration produced (None if not done), from
-    the `train_result.json` that `1a` writes when the job finishes. An
-    iteration whose job was submitted by an older version of `1a` (which did
-    not wait for the job) is resolved from `job_info.json`; rerunning `1a`
-    re-attaches to that job and writes `train_result.json`."""
-    result = iter_dir / "train_result.json"
-    if result.exists():
-        return json.loads(result.read_text())["model"]
-    info_path = iter_dir / "job_info.json"
-    if not info_path.exists():
-        return None
-    import openai
-
-    job = openai.OpenAI().fine_tuning.jobs.retrieve(json.loads(info_path.read_text())["id"])
-    if job.status != "succeeded" or not job.fine_tuned_model:
-        print(f"  {iter_dir.name}: job {job.id} status={job.status}; skipping")
-        return None
-    return job.fine_tuned_model
-
-
 def default_checkpoints() -> list[tuple[str, str]]:
-    """`base` plus `itNN` for every iteration of RUN_DIR with a finished job."""
-    ckpts = [("base", BASE_MODEL)]
-    for iter_dir in sorted(RUN_DIR.glob("iter_*")):
-        model = _iteration_model(iter_dir)
-        if model:
-            ckpts.append((iter_dir.name.replace("iter_", "it"), model))
-    return ckpts
+    """The `(label, model)` entries of `checkpoints.json`, in file order."""
+    ckpts = json.loads(CHECKPOINTS_PATH.read_text())
+    if not isinstance(ckpts, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) and v for k, v in ckpts.items()
+    ):
+        sys.exit(f"{CHECKPOINTS_PATH} must be a JSON object of label -> model id")
+    return list(ckpts.items())
 
 
 def resolve_checkpoints(args: argparse.Namespace) -> list[tuple[str, str]]:
