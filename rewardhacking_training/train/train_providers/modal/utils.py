@@ -12,6 +12,7 @@ have in common lives here:
 * ``poll_and_map`` — the single spawn-result handler: persist ``job_info.json``,
   heartbeat-poll the ``FunctionCall`` to completion, map the payload to a
   ``TrainResult``. (Replaces the three hand-inlined copies of this loop.)
+* ``reattach`` — re-join a spawned job from its ``job_info.json`` (resume).
 * ``grad_accum_steps`` / ``swift_pipeline_extra_args`` — pure config math.
 * ``build_trl_config`` / ``build_swift_config`` — the config-dict bodies shared
   by the DPO and SFT builders (each adds only its objective-specific keys).
@@ -122,6 +123,21 @@ def poll_and_map(
         model=f"{MODAL_LORA_PREFIX}{adapter_path}",
         resume_handle=adapter_path,
         info=payload,
+    )
+
+
+def reattach(
+    info: dict, output_dir: Path, poll_heartbeat_s: int = DEFAULT_POLL_HEARTBEAT_S,
+) -> TrainResult:
+    """Await the job recorded in ``job_info.json`` (as written by
+    ``poll_and_map``) instead of spawning a new one."""
+    import modal
+
+    print(f"re-attaching to Modal call {info['call_id']} ({info['run_tag']})")
+    backend = info["backend"]
+    return poll_and_map(
+        modal.FunctionCall.from_id(info["call_id"]), info["run_tag"], output_dir,
+        poll_heartbeat_s, app_name=info["app"], kind=backend, backend=backend,
     )
 
 

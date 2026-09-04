@@ -7,10 +7,12 @@ and keeps only genuinely provider-specific knobs behind a `<provider>_` prefix.
 `run_train(cfg)` submits a single blocking training job and returns a
 `TrainResult`; it dispatches on `(cfg.method, cfg.provider)` — DPO supports
 openai/tinker/together/modal/modal_swift; SFT supports openai/modal/modal_swift.
+When `cfg.output_dir` already holds a `job_info.json` from an interrupted run,
+`run_train` re-attaches to that job instead of submitting a new one (openai,
+together, modal, modal_swift; tinker trains in-process and always resubmits).
 
-This module knows nothing about the iterative-training state machine (no
-`state`, no run-dir layout, no phase advancement). The pipeline wrapper that
-adapts `run_train` to the state machine lives in
+This module knows nothing about the iteration layout; the loop that composes
+`run_train` with generate and select lives in
 `rewardhacking_training.training_iteration`.
 
 The concrete per-backend `train_dpo` / `train_sft` implementations live in
@@ -427,15 +429,45 @@ def _dispatch_train_dpo(cfg: TrainConfig) -> TrainResult:
 
 # ---- entrypoint --------------------------------------------------------
 
+def _reattach(cfg: TrainConfig) -> TrainResult | None:
+    """Await the job recorded in `<output_dir>/job_info.json` by an earlier
+    (interrupted) `run_train` of this config, rather than resubmitting.
+    Returns None when there is no such job or the provider cannot re-attach
+    (tinker), in which case the caller submits afresh."""
+    out = _out(cfg)
+    info_path = out / "job_info.json" if out is not None else None
+    if info_path is None or not info_path.exists():
+        return None
+    info = json.loads(info_path.read_text())
+    if cfg.provider == "openai" and "id" in info:
+        from rewardhacking_training.train.train_providers.openai.utils import reattach
+
+        return reattach(info, out, **_openai_poll_kwargs(cfg))
+    if cfg.provider == "together" and "id" in info:
+        from rewardhacking_training.train.train_providers.together.utils import reattach
+
+        return reattach(info, out)
+    if cfg.provider in ("modal", "modal_swift") and "call_id" in info:
+        from rewardhacking_training.train.train_providers.modal.utils import reattach
+
+        return reattach(info, out)
+    return None
+
+
 def run_train(cfg: TrainConfig) -> TrainResult:
-    """Submit a single training job (DPO or SFT) and block until it finishes.
+    """Run a single training job (DPO or SFT) and block until it finishes.
 
     Dispatches on `(cfg.method, cfg.provider)`: DPO supports
     openai/tinker/together/modal/modal_swift; SFT supports openai/modal/
-    modal_swift. Raises `RuntimeError` on submission/validation failure or an
-    unsupported `(method, provider)` combination (the step-machine halt
-    contract); callers that want to keep running should catch it.
+    modal_swift. If `cfg.output_dir` holds a `job_info.json` from an
+    interrupted run, the job it names is awaited instead of submitting a new
+    one (delete the file to force a resubmit). Raises `RuntimeError` on
+    submission/validation failure or an unsupported `(method, provider)`
+    combination; callers that want to keep running should catch it.
     """
+    result = _reattach(cfg)
+    if result is not None:
+        return result
     if cfg.method == "sft":
         return _dispatch_train_sft(cfg)
     return _dispatch_train_dpo(cfg)

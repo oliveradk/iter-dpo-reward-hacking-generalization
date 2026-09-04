@@ -213,6 +213,9 @@ Training hyperparameters are `TrainConfig` fields (`learning_rate`,
 `modal_micro_batch_size`); an experiment sets them once and `run_iteration` fills
 in the per-round job I/O. `method="sft"` runs expert iteration instead of DPO
 (top-`n` selection; openai/modal/modal_swift) — see the Qwen warmstart round.
+A training run whose `output_dir` already holds a `job_info.json` re-attaches
+to that job instead of submitting a new one (openai/together/modal), so an
+interrupted train stage — or the train CLI rerun on the same dir — resumes.
 
 ## Pieces of the pipeline, standalone
 

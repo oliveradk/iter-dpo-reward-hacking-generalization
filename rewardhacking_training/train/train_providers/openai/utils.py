@@ -1,9 +1,9 @@
 """Shared utilities for OpenAI fine-tuning jobs (client, upload, blocking poll).
 
 Used by both ``openai.dpo`` and ``openai.sft`` — the only thing they don't
-share is the ``method`` block of the submit call and the ``TrainResult``
-mapping, so everything else (client, file upload, job-info persistence, and the
-blocking poll loop) lives here.
+share is the ``method`` block of the submit call, so everything else (client,
+file upload, job-info persistence, the blocking poll loop, and re-attaching to
+a submitted job) lives here.
 """
 
 from __future__ import annotations
@@ -15,6 +15,8 @@ from pathlib import Path
 
 import openai
 from dotenv import load_dotenv
+
+from rewardhacking_training.train.train_providers.types import TrainResult
 
 
 def get_client() -> openai.OpenAI:
@@ -71,3 +73,13 @@ def poll_job(
         poll_idx += 1
         print(f"  sleeping {wait}s before next poll")
         time.sleep(wait)
+
+
+def reattach(
+    info: dict, output_dir: Path, poll_schedule_s: tuple[int, ...] = DEFAULT_POLL_SCHEDULE_S,
+) -> TrainResult:
+    """Await the job recorded in ``job_info.json`` (as written by
+    ``save_job_info``) instead of submitting a new one."""
+    print(f"re-attaching to OpenAI job {info['id']}")
+    final = poll_job(get_client(), info["id"], output_dir=output_dir, poll_schedule_s=poll_schedule_s)
+    return TrainResult(model=final["fine_tuned_model"], resume_handle=None, info=final)

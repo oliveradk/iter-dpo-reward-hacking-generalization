@@ -32,14 +32,15 @@ from __future__ import annotations
 
 import json
 import os
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
 from together import Together
 
 from rewardhacking_training.train.train_providers.together.utils import (
+    DEFAULT_POLL_SCHEDULE_S,
     get_client,
+    poll_job,
     save_job_info,
     upload_training_file,
 )
@@ -49,14 +50,6 @@ from rewardhacking_training.train.train_providers.types import (
     convert_file,
     write_train_result,
 )
-
-# Terminal fine-tuning statuses (see FinetuneResponse.status literal).
-_TERMINAL_STATES = {"completed", "error", "cancelled"}
-
-DEFAULT_POLL_SCHEDULE_S: tuple[int, ...] = (300, 600, 1200, 2400)
-"""Successive sleep durations between poll attempts. Once exhausted we keep
-polling at the last value (2400s = 40m) until terminal."""
-
 
 # ---- standardized-format -> preference-format conversion ---------------
 
@@ -236,36 +229,9 @@ def train_dpo(
     if output_dir is not None:
         save_job_info(job_info, Path(output_dir))
 
-    poll_idx = 0
-    while True:
-        job = client.fine_tuning.retrieve(job_id)
-        status = job.status
-        print(f"Job {job_id}: {status}")
-        if status in _TERMINAL_STATES:
-            final = job.model_dump()
-            if output_dir is not None:
-                (Path(output_dir) / "job_final.json").write_text(
-                    json.dumps(final, indent=2, default=str)
-                )
-            if status != "completed":
-                raise RuntimeError(
-                    f"Together job {job_id} ended with status={status}"
-                )
-            output_model = final.get("x_model_output_name")
-            if not output_model:
-                raise RuntimeError(
-                    f"Together job {job_id} completed but has no "
-                    f"x_model_output_name: {final!r}"
-                )
-            return TrainResult(
-                model=output_model,
-                resume_handle=job_id,
-                info=final,
-            )
-        wait = poll_schedule_s[min(poll_idx, len(poll_schedule_s) - 1)]
-        poll_idx += 1
-        print(f"  sleeping {wait}s before next poll")
-        time.sleep(wait)
+    return poll_job(
+        client, job_id, output_dir=output_dir, poll_schedule_s=poll_schedule_s
+    )
 
 
 # ---- CLI ---------------------------------------------------------------

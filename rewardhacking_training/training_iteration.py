@@ -9,7 +9,7 @@ warmstart). The layout an iteration leaves behind:
       generate_<env>/              inspect logs + eval_log.json pointer, per env
       <method>_data_<env>.jsonl    selected rows, per env
       <method>_data.jsonl          combined + shuffled training file
-      job_info.json                provider job handle, written on submit
+      job_info.json                provider job handle, written on submit (resume)
       train_result.json            {"model", "resume_handle", "info"}
 
 `train_result.json` is the iteration's contract with the outside world: the
@@ -35,10 +35,7 @@ from typing import Literal
 from rewardhacking_training.generate.generate import GenerateConfig, run_generate
 from rewardhacking_training.select.select import SelectConfig, run_select
 from rewardhacking_training.train.train import TrainConfig, run_train
-from rewardhacking_training.train.train_providers.types import (
-    TrainResult,
-    write_train_result,
-)
+from rewardhacking_training.train.train_providers.types import write_train_result
 
 Method = Literal["dpo", "sft"]
 STAGES = ("generate", "select", "combine", "train")
@@ -140,56 +137,22 @@ def combine_stage(
     return out_path
 
 
-def _reattach(stage_dir: Path, cfg: TrainConfig, info: dict) -> TrainResult | None:
-    """Await a job submitted by an earlier (interrupted) run of this stage
-    rather than resubmitting it. Returns None when the provider's job handle
-    cannot be re-attached, in which case the caller resubmits."""
-    if cfg.provider in ("modal", "modal_swift") and "call_id" in info:
-        import modal
-
-        from rewardhacking_training.train.train_providers.modal.utils import (
-            DEFAULT_POLL_HEARTBEAT_S,
-            poll_and_map,
-        )
-
-        print(f"[{stage_dir.name}] re-attaching to Modal call {info['call_id']} ({info['run_tag']})")
-        backend = info.get("backend", cfg.provider)
-        return poll_and_map(
-            modal.FunctionCall.from_id(info["call_id"]), info["run_tag"], stage_dir,
-            DEFAULT_POLL_HEARTBEAT_S, app_name=info["app"], kind=backend, backend=backend,
-        )
-    if cfg.provider == "openai" and "id" in info:
-        from rewardhacking_training.train.train_providers.openai.utils import (
-            get_client,
-            poll_job,
-        )
-
-        print(f"[{stage_dir.name}] re-attaching to OpenAI job {info['id']}")
-        final = poll_job(get_client(), info["id"], output_dir=stage_dir)
-        return TrainResult(model=final["fine_tuned_model"], resume_handle=None, info=final)
-    return None
-
-
 def train_stage(stage_dir: Path, cfg: TrainConfig, *, force: bool = False) -> dict:
     """Run the iteration's training job on the combined file and block until it
     finishes; returns (and persists) the `train_result.json` dict. `cfg`
     carries the provider, base model and hyperparameters; `training_file`
     and `output_dir` are set here from the layout. An interrupted stage whose
-    job was already submitted re-attaches to that job instead of resubmitting."""
+    job was already submitted re-attaches to it (`run_train` reads the
+    stage's `job_info.json`); `force` discards that job and resubmits."""
     result = stage_result(stage_dir)
     if result is not None and not force:
         print(f"[{stage_dir.name}] train already complete, skipping")
         return result
     training_file = _require(data_path(stage_dir, cfg.method), "combine")
     cfg = replace(cfg, training_file=str(training_file), output_dir=str(stage_dir))
-
-    info_path = stage_dir / "job_info.json"
-    res = None
-    if info_path.exists() and not force:
-        res = _reattach(stage_dir, cfg, json.loads(info_path.read_text()))
-    if res is None:
-        res = run_train(cfg)
-    return write_train_result(res, stage_dir)
+    if force:
+        (stage_dir / "job_info.json").unlink(missing_ok=True)
+    return write_train_result(run_train(cfg), stage_dir)
 
 
 # ---- one iteration --------------------------------------------------------
