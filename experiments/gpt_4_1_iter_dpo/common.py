@@ -92,11 +92,14 @@ def parse_args(ap: argparse.ArgumentParser) -> argparse.Namespace:
 # ---- checkpoints ----------------------------------------------------------
 
 def _iteration_model(iter_dir: Path) -> str | None:
-    """The fine-tuned model an iteration's job produced (None if not done).
-    Cached in `iter_NN/fine_tuned_model.txt` once the job has succeeded."""
-    cache = iter_dir / "fine_tuned_model.txt"
-    if cache.exists():
-        return cache.read_text().strip()
+    """The fine-tuned model an iteration produced (None if not done), from
+    the `train_result.json` that `1a` writes when the job finishes. An
+    iteration whose job was submitted by an older version of `1a` (which did
+    not wait for the job) is resolved from `job_info.json`; rerunning `1a`
+    re-attaches to that job and writes `train_result.json`."""
+    result = iter_dir / "train_result.json"
+    if result.exists():
+        return json.loads(result.read_text())["model"]
     info_path = iter_dir / "job_info.json"
     if not info_path.exists():
         return None
@@ -106,7 +109,6 @@ def _iteration_model(iter_dir: Path) -> str | None:
     if job.status != "succeeded" or not job.fine_tuned_model:
         print(f"  {iter_dir.name}: job {job.id} status={job.status}; skipping")
         return None
-    cache.write_text(job.fine_tuned_model + "\n")
     return job.fine_tuned_model
 
 

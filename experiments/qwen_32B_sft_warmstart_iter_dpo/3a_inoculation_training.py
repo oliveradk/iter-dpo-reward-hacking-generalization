@@ -17,9 +17,7 @@ from pipeline import (
 )
 
 from experiment_utils.serving import pin_modal_url
-
-STAGES = ["generate", "select", "combine", "train"]
-
+from experiment_utils.training.stages import STAGES
 
 def run_condition(name: str, args: argparse.Namespace) -> None:
     cond = CONDITIONS[name]

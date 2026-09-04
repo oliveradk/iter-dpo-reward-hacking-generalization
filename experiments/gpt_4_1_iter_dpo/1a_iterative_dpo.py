@@ -1,43 +1,35 @@
+"""Iterative DPO on gpt-4.1 (the paper's core training run).
+
+Each iteration generates on-policy samples from the current checkpoint,
+selects preference pairs, and fine-tunes it with an OpenAI DPO job (blocking
+until the job finishes). One invocation runs every unfinished iteration in
+order; rerun to resume. Every hyperparameter lives here; the stage mechanics
+come from `experiment_utils.training.stages`.
+"""
+
 from __future__ import annotations
 
 import argparse
-import json
-import math
 import os
-import random
 import sys
-from dataclasses import asdict
 from pathlib import Path
 
-from common import BASE_MODEL, REPO_ROOT, RUN_DIR, RUN_NAME
+from common import BASE_MODEL, RUN_DIR, RUN_NAME
 
-assert os.environ.get("OPENAI_API_KEY"), "OPENAI_API_KEY not set"
+from rewardhacking_training.generate.generate import GenerateConfig, ModelConfig
+from rewardhacking_training.generate.inference_client import InferenceClientConfig
+from rewardhacking_training.select.select import SelectConfig
+from rewardhacking_training.train.train import TrainConfig
+from rewardhacking_training.data_sampling import dataset_prompt_ids, round_prompt_ids
 
-from rewardhacking_training.generate.generate import (
-    GenerateConfig,
-    ModelConfig,
-    _resolve_task,
-    run_generate,
-)
-from rewardhacking_training.generate.inference_client import (
-    InferenceClientConfig,
-)
-from rewardhacking_training.select.select import SelectConfig, run_select
-from rewardhacking_training.train.train_providers.openai.dpo import (
-    convert_standardized_file_to_openai,
-    submit_dpo_job,
-)
-from rewardhacking_training.train.train_providers.openai.utils import (
-    get_client,
-    save_job_info,
-    upload_training_file,
-)
+from experiment_utils.training.stages import STAGES, Round, run_round, stage_result
 
 # ---- hyperparameters (paper gpt-4.1 recipe) -------------------------------
 # BASE_MODEL / RUN_NAME / RUN_DIR come from `common` so the eval scripts can
 # find this run's checkpoints.
 
 SEED = 42
+N_ITERATIONS = 3
 
 N_SAMPLES = {"impossible_mbpp": 20, "nl_gameable": 50}  # completions per prompt
 MAX_TOKENS = 1536
@@ -77,190 +69,94 @@ def iter_dir(i: int) -> Path:
     return RUN_DIR / f"iter_{i:02d}"
 
 
-def gen_dir(i: int, env: str) -> Path:
-    return iter_dir(i) / f"generate_{env}"
+# ---- per-iteration stage configs -----------------------------------------
 
-
-def env_dpo_path(i: int, env: str) -> Path:
-    return iter_dir(i) / f"dpo_data_{env}.jsonl"
-
-
-def infer_iteration() -> int:
-    """First iteration whose job has not been submitted yet."""
-    i = 0
-    while (iter_dir(i) / "job_info.json").exists():
-        i += 1
-    return i
-
-
-def count_lines(path: Path) -> int:
-    return sum(1 for _ in path.open())
-
-
-# ---- manual epoch indexing ------------------------------------------------
-
-def iteration_prompt_ids(env: str, i: int) -> list[str]:
-    """Iteration `i`'s chunk of env's prompt stream (independently shuffled
-    epochs, concatenated), `EPOCH_FRACTION[env]` of an epoch per iteration."""
-    task = _resolve_task(ENV_TASKS[env])(**ENV_TASK_ARGS[env])
-    epoch_ids = [str(s.id) for s in task.dataset]
-    size = len(epoch_ids)
-    count = max(1, round(EPOCH_FRACTION[env] * size))
-    start, stop = i * count, (i + 1) * count
-    ids: list[str] = []
-    for epoch in range(start // size, math.ceil(stop / size)):
-        order = list(epoch_ids)
-        random.Random(f"{SEED}/{env}/epoch/{epoch}").shuffle(order)
-        ids.extend(order[max(start - epoch * size, 0):stop - epoch * size])
-    print(f"[iter {i}/{env}] epoch size {size}; {len(ids)} prompts from stream offset {start}")
-    return ids
-
-
-# ---- resumable stages -----------------------------------------------------
-# Each stage skips itself when its artifact exists (unless forced), and
-# raises when the previous stage's artifact is missing.
-
-def show_config(cfg) -> None:
-    for k, v in asdict(cfg).items():
-        if k == "task_args" and "prompt_ids" in v:
-            v = {**v, "prompt_ids": f"[{len(v['prompt_ids'])} ids]"}
-        print(f"  {k} = {v}")
-
-
-def require(path: Path, stage: str) -> Path:
-    if not path.exists():
-        raise RuntimeError(f"{stage} stage incomplete: {path} missing")
-    return path
-
-
-def generate_status(i: int, env: str) -> str | None:
-    p = gen_dir(i, env) / "eval_log.json"
-    return json.loads(p.read_text()).get("status") if p.exists() else None
-
-
-def run_generate_stage(i: int, env: str, model: str, force: bool = False) -> None:
-    status = generate_status(i, env)
-    if status == "success" and not force:
-        print(f"[iter {i}/{env}] generate already complete, skipping")
-        return
-    if status is not None:
-        print(f"[iter {i}/{env}] previous generate ended with status={status}; rerunning")
-    cfg = GenerateConfig(
+def generate_cfg(env: str, i: int) -> GenerateConfig:
+    """`model` (a bare / ft: OpenAI id; the inference client prefixes
+    openai/) is filled in by `run_round`."""
+    ids = round_prompt_ids(
+        dataset_prompt_ids(ENV_TASKS[env], ENV_TASK_ARGS[env]), i,
+        seed=SEED, name=env, epoch_fraction=EPOCH_FRACTION[env],
+    )
+    print(f"[iter {i}/{env}] {len(ids)} prompts")
+    return GenerateConfig(
         task=ENV_TASKS[env],
-        model=model,  # bare / ft: OpenAI id; the inference client prefixes openai/
         model_config=ModelConfig(inference_client=InferenceClientConfig(provider="openai")),
         n_samples=N_SAMPLES[env],
         system_prompts_path=SYSTEM_PROMPTS_PATH,
-        task_args={**ENV_TASK_ARGS[env], "prompt_ids": iteration_prompt_ids(env, i)},
+        task_args={**ENV_TASK_ARGS[env], "prompt_ids": ids},
         max_connections=MAX_CONNECTIONS,
     )
-    print(f"[iter {i}/{env}] generate config:")
-    show_config(cfg)
-    run_generate(cfg, out=gen_dir(i, env))
 
 
-def run_select_stage(i: int, env: str, force: bool = False) -> None:
-    out_path = env_dpo_path(i, env)
-    if out_path.exists() and not force:
-        print(f"[iter {i}/{env}] select already complete ({count_lines(out_path)} rows), skipping")
-        return
-    if generate_status(i, env) != "success":
-        raise RuntimeError(f"iter {i}/{env}: generate stage incomplete")
-    cfg = SelectConfig(
-        input_path=str(gen_dir(i, env)),
-        output_path=str(out_path),
-        mode="dpo",
-        seed=SEED,
-        **ENV_SELECT_ARGS[env],
-    )
-    print(f"[iter {i}/{env}] select config:")
-    show_config(cfg)
-    run_select(cfg, out=iter_dir(i))
+def select_cfg(env: str) -> SelectConfig:
+    return SelectConfig(seed=SEED, **ENV_SELECT_ARGS[env])
 
 
-def run_combine_stage(i: int, force: bool = False) -> None:
-    out_path = iter_dir(i) / "dpo_data.jsonl"
-    if out_path.exists() and not force:
-        print(f"[iter {i}] combine already complete ({count_lines(out_path)} rows), skipping")
-        return
-    rows = []
-    for env in ENVS:
-        text = require(env_dpo_path(i, env), "select").read_text()
-        rows.extend(line for line in text.splitlines() if line.strip())
-    random.Random(f"{SEED}/combine/{i}").shuffle(rows)
-    out_path.write_text("\n".join(rows) + "\n")
-    print(f"[iter {i}] combined {len(rows)} rows -> {out_path}")
+TRAIN_CFG = TrainConfig(
+    provider="openai",
+    base_model=BASE_MODEL,
+    beta=DPO_BETA,
+    n_epochs=N_EPOCHS,
+    batch_size=BATCH_SIZE,
+    openai_lr_multiplier=LR_MULTIPLIER,
+)
 
 
-def run_train_stage(i: int, model: str, force: bool = False) -> dict:
-    """Upload the combined file and submit the OpenAI DPO job; does NOT poll."""
-    info_path = iter_dir(i) / "job_info.json"
-    if info_path.exists() and not force:
-        info = json.loads(info_path.read_text())
-        print(f"[iter {i}] job already submitted, skipping -> {info['id']}")
-        return info
-    dpo_path = require(iter_dir(i) / "dpo_data.jsonl", "combine")
-    openai_path = convert_standardized_file_to_openai(dpo_path, dpo_path.with_suffix(".openai.jsonl"))
-    client = get_client()
-    file_id = upload_training_file(client, openai_path)
-    info = submit_dpo_job(
-        client, file_id, model,
-        beta=DPO_BETA, n_epochs=N_EPOCHS, batch_size=BATCH_SIZE,
-        learning_rate_multiplier=LR_MULTIPLIER,
+# ---- iterations -----------------------------------------------------------
+
+def run_iteration(i: int, *, force: set[str] = frozenset()) -> dict:
+    """Iteration `i`: generate from the previous iteration's fine-tune (the
+    base model at iteration 0), select pairs, submit + await the DPO job."""
+    if i == 0:
+        model = BASE_MODEL
+    else:
+        prev = stage_result(iter_dir(i - 1))
+        if prev is None:
+            raise SystemExit(
+                f"iteration {i} needs {iter_dir(i - 1)}/train_result.json — run iteration {i - 1} first"
+            )
+        model = prev["model"]
+    print(f"\n=== iteration {i}: generating from {model}")
+    return run_round(Round(
+        stage_dir=iter_dir(i),
+        method="dpo",
+        model=model,
+        envs=ENVS,
+        generate=lambda env: generate_cfg(env, i),
+        select=select_cfg,
+        train=TRAIN_CFG,
         suffix=f"{RUN_NAME}-it{i:02d}".replace("_", "-")[:40],
-    )
-    save_job_info(info, iter_dir(i))
-    print(f"[iter {i}] OpenAI DPO job submitted: {info['id']} (from {model})")
-    return info
+        seed=SEED,
+    ), force=force)
 
 
-# ---- main ----------------------------------------------------------------
-
-STAGES = ["generate", "select", "combine", "train"]
-
-
-def resolve_model(i: int, requested: str | None) -> str:
-    """The model iteration `i` generates from and fine-tunes. Pinned in
-    `iter_NN/model.txt` on first use so a resumed iteration can't switch."""
-    pin = iter_dir(i) / "model.txt"
-    pinned = pin.read_text().strip() if pin.exists() else None
-    model = requested or pinned or (BASE_MODEL if i == 0 else None)
-    if model is None:
-        sys.exit(f"iteration {i} needs --model <ft: checkpoint from iteration {i - 1}>")
-    if pinned and pinned != model:
-        sys.exit(f"iteration {i} already started from {pinned!r}, not {model!r}")
-    pin.parent.mkdir(parents=True, exist_ok=True)
-    pin.write_text(model + "\n")
-    return model
+def pending_iterations(n_iterations: int) -> list[int]:
+    return [i for i in range(n_iterations) if stage_result(iter_dir(i)) is None]
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", help="checkpoint to generate from and fine-tune "
-                    "(previous iteration's ft: id); defaults to the base model at iteration 0")
-    ap.add_argument("--iteration", type=int, help="default: first iteration without a submitted job")
+    ap.add_argument("--n-iterations", type=int, default=N_ITERATIONS,
+                    help="run every unfinished iteration up to this many")
+    ap.add_argument("--iteration", type=int,
+                    help="run only this iteration (required with --force)")
     ap.add_argument("--force", nargs="*", default=[], choices=STAGES,
-                    help="redo these stages even if their artifacts exist")
+                    help="redo these stages of --iteration even if their artifacts exist")
     args = ap.parse_args()
+    if args.force and args.iteration is None:
+        sys.exit("--force needs --iteration")
+    if not os.environ.get("OPENAI_API_KEY"):
+        sys.exit("OPENAI_API_KEY not set")
 
-    i = infer_iteration() if args.iteration is None else args.iteration
-    model = resolve_model(i, args.model)
-    force = set(args.force)
-    print(f"run dir: {RUN_DIR}\niteration {i}, model {model}")
-
-    for env in ENVS:
-        run_generate_stage(i, env, model, force="generate" in force)
-    for env in ENVS:
-        run_select_stage(i, env, force="select" in force)
-    run_combine_stage(i, force="combine" in force)
-    info = run_train_stage(i, model, force="train" in force)
-
-    print(
-        f"\nJob {info['id']} submitted; this script does not wait for it. Check with:\n"
-        f"  python -c \"import openai; print(openai.OpenAI().fine_tuning.jobs.retrieve('{info['id']}').fine_tuned_model)\"\n"
-        f"then run iteration {i + 1} with:\n"
-        f"  python {Path(__file__).relative_to(REPO_ROOT)} --model <fine_tuned_model>"
-    )
+    iterations = ([args.iteration] if args.iteration is not None
+                  else pending_iterations(args.n_iterations))
+    print(f"run dir: {RUN_DIR}\niterations to run: {iterations or 'none (all done)'}")
+    for i in iterations:
+        run_iteration(i, force=set(args.force))
+    done = [i for i in range(args.n_iterations) if stage_result(iter_dir(i)) is not None]
+    if done:
+        print(f"\nfinal checkpoint (iteration {done[-1]}): {stage_result(iter_dir(done[-1]))['model']}")
 
 
 if __name__ == "__main__":

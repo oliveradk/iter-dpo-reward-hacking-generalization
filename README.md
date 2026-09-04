@@ -12,7 +12,7 @@ and studying the resulting generalization. Two threads:
 
 The architecture is built on [`inspect_ai`](https://inspect.aisi.org.uk/):
 generation/scoring environments and all evals are inspect tasks, and the
-iterative training pipeline drives them through a resumable state machine.
+experiments' iterative-training loops drive them through resumable stages.
 
 Companion repository for our paper; see [`experiments/gpt_4_1_iter_dpo/`](experiments/gpt_4_1_iter_dpo/) for the
 paper's core training runs and eval sweeps.
@@ -29,7 +29,7 @@ rewardhacking_evals/    # inspect-native "does it hack when told not to" eval su
 agentic_rewardhacking/  # agentic reward-hacking evals (bash_chess; EvilGenie runbook)
 capabilities_evals/     # inspect-native capability eval suite (IFEval, GSM8K, AIME, …)
 automatic_alignment_audit/  # Petri automated alignment audits (self-preservation, oversight subversion)
-experiment_utils/       # shared eval-runner + plotting CLIs for the standard pipeline
+experiment_utils/       # training/stages.py (resumable round stages) + eval runner + plotting for the experiments
 utils/                  # browse tools for eval/training data
 experiments/gpt_4_1_iter_dpo/  # recipes for the paper's core experiments (gpt-4.1 iterative DPO + evals)
 experiments/qwen_32B_sft_warmstart_iter_dpo/  # Qwen2.5-32B SFT warmstart + iterative DPO on Modal, plus evals
@@ -101,26 +101,23 @@ MODAL_INFERENCE_BASE_MODEL=models/Qwen2.5-32B-Instruct \
 `MODAL_VLLM_API_KEY` in `.env`).)
 
 ```bash
-# 2. Run iterative DPO: each iteration generates completions from the current
-#    model, selects score-separated DPO pairs, trains a LoRA, and advances.
-CFG=rewardhacking_training/data_generators/configs
-python -m rewardhacking_training.iterative_training.iterative_training \
-    --run-name qwen32b-dpo --base-model Qwen/Qwen2.5-32B-Instruct \
-    --provider modal --method dpo \
-    --n-iterations 4 --n-prompts 50 \
-    --generator $CFG/impossible_mbpp.base.json $CFG/nl_gameable.base.json
+# 2. Run the SFT warmstart + iterative DPO recipe (blocking; rerun to resume)
+python experiments/qwen_32B_sft_warmstart_iter_dpo/1a_sft_warmstart.py
+python experiments/qwen_32B_sft_warmstart_iter_dpo/2a_iterative_dpo.py
 ```
 
-Generators are JSON config files (multiple in a space-separated list after one
-`--generator` flag, with optional per-generator overrides like `:np=80` or
-`:frac=0.25`); completions-per-prompt, inoculation, filters, etc. live in the
-generator config — see `rewardhacking_training/data_generators/configs/README.md`.
-Resume an interrupted run with
-`--resume-from output/iterative_training/<run>_<ts>/`.
+Each iteration generates completions from the current model, selects
+score-separated DPO pairs, trains a LoRA, and advances. The recipe (envs,
+samples per prompt, selection knobs, hyperparameters) is a set of constants in
+`experiments/qwen_32B_sft_warmstart_iter_dpo/pipeline.py`; the resumable
+stage mechanics it composes live in `experiment_utils/training/stages.py`
+(one `Round` = generate → select → combine → train into `iter_NN/`). To train
+a different recipe, copy an experiment dir and edit its constants.
 
-The run writes per-iteration checkpoints; the final model id lands in
-`output/iterative_training/<run>_<ts>/final_model.txt` as
-`modal-lora:adapters/<run_tag>` (a volume-relative LoRA adapter path).
+The run writes per-iteration checkpoints; each `iter_NN/train_result.json`
+carries the model id, and the final one lands in
+`output/experiments/qwen_32B_sft_warmstart_iter_dpo/iterative_dpo/<run>/final_model.txt`
+as `modal-lora:adapters/<run_tag>` (a volume-relative LoRA adapter path).
 
 ### 3. Evaluate the trained model
 
@@ -200,38 +197,37 @@ prompt is used and the provider-parsed trace is taken as-is.
 
 ## Other providers
 
-`--provider` selects the single service used for both generation and training:
+`TrainConfig.provider` (and the generate stage's `InferenceClientConfig.provider`)
+selects the service used for training and serving:
 
 | provider | training | serving | notes |
 |---|---|---|---|
-| `openai` | DPO + SFT fine-tuning jobs | OpenAI API | default; e.g. `--base-model gpt-4.1-2025-04-14` |
+| `openai` | DPO + SFT fine-tuning jobs | OpenAI API | default; `experiments/gpt_4_1_iter_dpo/` |
 | `tinker` | DPO (LoRA) | tinker sampler | reasoning models get the separate-trace parser |
 | `together` | DPO (serverless jobs) | Together serverless | checkpoint-resume via `from_checkpoint` |
 | `modal` | TRL DPO + SFT (LoRA) | self-hosted vLLM | quick start above |
 | `modal_swift` | ms-swift/Megatron DPO + SFT | self-hosted vLLM ≥ 0.11.2 | large MoE models (e.g. Qwen3-235B-A22B) |
 
-Training hyperparameters are nested CLI flags under `--train.*`
-(`--train.learning-rate`, `--train.batch-size`, `--train.n-epochs`,
-`--train.beta`, `--train.lora-rank`, provider knobs like
-`--train.modal-micro-batch-size`, …); generation serving knobs live under
-`--gen-model.*` (e.g. `--gen-model.inference-client.tinker-renderer-name`).
-`--method sft` runs
-expert iteration instead of DPO (top-`n` selection; openai/modal/modal_swift).
+Training hyperparameters are `TrainConfig` fields (`learning_rate`,
+`batch_size`, `n_epochs`, `beta`, `lora_rank`, and provider-prefixed knobs like
+`modal_micro_batch_size`); an experiment sets them once and `run_round` fills
+in the per-round job I/O. `method="sft"` runs expert iteration instead of DPO
+(top-`n` selection; openai/modal/modal_swift) — see the Qwen warmstart round.
 
 ## Pieces of the pipeline, standalone
 
 ```bash
-# Stage 1+2: generate completions + select DPO pairs (one shot, no training)
-python -m rewardhacking_training.generate_and_select.generate_and_select \
-    rewardhacking_training/data_generators/configs/impossible_mbpp.base.json \
-    --generate.n-samples 8 --select.n 4
+# Stage 1: generate completions (writes <out>/eval_log.json + inspect logs)
+python -m rewardhacking_training.generate.generate \
+    --task rewardhacking_training.envs.impossible_mbpp.impossible_mbpp_env:impossible_mbpp \
+    --model gpt-4.1-mini --n-samples 8
 
-# One-off training from a standardized JSONL
-python -m rewardhacking_training.train.train output/.../merged_dpo_data.jsonl \
+# Stage 2: select DPO pairs from a generate dir
+python -m rewardhacking_training.select.select --input-path <generate dir> --n 4
+
+# Stage 3: one-off training from a standardized JSONL
+python -m rewardhacking_training.train.train output/.../dpo_data.jsonl \
     --provider modal --base-model Qwen/Qwen2.5-32B-Instruct --method dpo
-
-# Single-step the state machine (debugging)
-python -m rewardhacking_training.iterative_training.step --run-dir <RUN_DIR>
 ```
 
 ## Browse artifacts

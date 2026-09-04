@@ -14,9 +14,7 @@ from pipeline import (
 )
 
 from experiment_utils.serving import pin_modal_url
-
-STAGES = ["generate", "select", "combine", "train"]
-
+from experiment_utils.training.stages import STAGES
 
 def main() -> None:
     ap = argparse.ArgumentParser()

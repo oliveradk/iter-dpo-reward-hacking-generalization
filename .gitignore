@@ -11,7 +11,6 @@ __pycache__/
 # Prompt/config JSON banks are source, not run artifacts — keep them tracked.
 !rewardhacking_training/inoculation_prompts/**/*.json
 !rewardhacking_training/system_prompts/**/*.json
-!rewardhacking_training/data_generators/configs/*.json
 # Recorded content hashes of the Petri built-in seeds (drift detection)
 !automatic_alignment_audit/seeds_manifest.json
 misc/

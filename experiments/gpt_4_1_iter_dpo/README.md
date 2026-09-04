@@ -10,19 +10,18 @@ source .venv/bin/activate
 
 ## 1. Iterative DPO (3 iterations)
 
-Each run of `1a` does one iteration: generate on-policy samples, select
-preference pairs, and submit an OpenAI DPO job. It does not wait for the job;
-once the job finishes, pass its fine-tuned model id to the next run.
+Each iteration generates on-policy samples from the current checkpoint
+(gpt-4.1 at iteration 0), selects preference pairs, and fine-tunes it with an
+OpenAI DPO job, waiting for the job to finish. One invocation runs every
+unfinished iteration in order; rerun to resume (an interrupted iteration
+re-attaches to its already-submitted job). The recipe and every
+hyperparameter live in `1a_iterative_dpo.py`.
 
 ```bash
-# iteration 0 (from gpt-4.1)
 python experiments/gpt_4_1_iter_dpo/1a_iterative_dpo.py
 
-# iteration 1
-python experiments/gpt_4_1_iter_dpo/1a_iterative_dpo.py --model <ft: model id from iteration 0>
-
-# iteration 2
-python experiments/gpt_4_1_iter_dpo/1a_iterative_dpo.py --model <ft: model id from iteration 1>
+# redo one stage of one iteration
+python experiments/gpt_4_1_iter_dpo/1a_iterative_dpo.py --iteration 1 --force select combine train
 
 # training curves
 python experiments/gpt_4_1_iter_dpo/1b_iterative_dpo_plot.py

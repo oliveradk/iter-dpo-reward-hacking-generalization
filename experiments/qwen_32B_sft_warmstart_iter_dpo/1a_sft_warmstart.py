@@ -8,8 +8,7 @@ from pathlib import Path
 from common import REPO_ROOT, RUN_DIR
 from pipeline import CONDITIONS, run_sft_round
 
-STAGES = ["generate", "select", "combine", "train"]
-
+from experiment_utils.training.stages import STAGES
 
 def main() -> None:
     ap = argparse.ArgumentParser()
