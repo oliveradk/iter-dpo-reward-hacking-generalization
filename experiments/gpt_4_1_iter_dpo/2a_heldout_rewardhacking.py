@@ -6,6 +6,10 @@ from common import EVAL_LOGS, add_checkpoint_args, parse_args, resolve_checkpoin
 
 from experiment_utils import run_specgaming_evals
 
+# toy_reward lives in 3a_reward_seeking; this battery is the two held-out
+# coding / NLG spec-gaming envs.
+ENVS = ["impossible_apps", "short_gameable"]
+
 
 def main() -> None:
     ap = argparse.ArgumentParser()
@@ -22,6 +26,7 @@ def main() -> None:
         checkpoints=[f"{label}={model}" for label, model in ckpts],
         base_model=args.base_model,
         provider=args.provider,
+        envs=ENVS,
         max_connections=args.max_connections,
         apps_limit=args.apps_limit,
         sg_n_repeats=args.sg_n_repeats,

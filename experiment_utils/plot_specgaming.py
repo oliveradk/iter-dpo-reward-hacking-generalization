@@ -7,11 +7,11 @@ Consumes the `run_specgaming_evals` layout
 switches every cell to that inoculation variant (one plot with the block in
 context, one without). Accepts an arbitrary number of checkpoints.
 
-short_gameable panel metric: geometric-mean fold change of the five per-task
-means vs a reference checkpoint's matching cell (``--sg-reference``, default
-the first checkpoint), or a per-task z-score vs a teacher log dir
-(``--sg-teacher``); z-normalization against default gpt-4.1-mini stats is
-pending the repo-wide normalization work.
+short_gameable panel metric: mean per-task z-score (the paper's
+`fig:qwen-rewardhacking` axis) against a reference checkpoint's matching
+cell (``--sg-reference``, default the first checkpoint, i.e. z vs base) or
+against a teacher log dir (``--sg-teacher``); or, with ``--sg-metric fold``,
+the geometric-mean fold change of the per-task means vs the reference.
 
 Example::
 
@@ -31,10 +31,11 @@ import matplotlib.pyplot as plt
 import tyro
 
 from experiment_utils.metrics import hack_rate, pct, sg_fold, sg_zscore
-from experiment_utils.plotting import Bar, PALETTE, finish, grouped_bars, use_style
+from experiment_utils.plotting import PALETTE, Bar, finish, grouped_bars, use_style
 from experiment_utils.serving import parse_pairs
 
 INSTR_GROUPS = [("noinstr", "standard"), ("nohack", "no-gaming instructions")]
+ENVS = ("impossible_apps", "short_gameable", "toy_reward")
 
 
 @dataclass
@@ -47,11 +48,17 @@ class Config:
     inoc_name: str | None = None
     """Read the _inoc_<name> variant of every cell."""
     instructions: list[str] = field(default_factory=lambda: ["noinstr", "nohack"])
-    sg_metric: Literal["fold", "zscore"] = "fold"
+    envs: list[str] = field(default_factory=lambda: list(ENVS))
+    """Panels to draw, in order (subset of impossible_apps / short_gameable / toy_reward)."""
+    sg_metric: Literal["zscore", "fold"] = "zscore"
     sg_reference: str | None = None
-    """Checkpoint label anchoring the sg fold change (default: first checkpoint)."""
+    """Checkpoint label the sg z-score / fold change is taken against
+    (default: first checkpoint)."""
     sg_teacher: str | None = None
-    """Teacher log dir (cell dir with .eval files) for --sg-metric zscore."""
+    """Teacher log dir (cell dir with .eval files) to z-score against instead
+    of the reference checkpoint's cell."""
+    colors: list[str] = field(default_factory=list)
+    """label=hex overrides (default: palette order)."""
     hatched: bool = False
     title: str | None = None
 
@@ -60,7 +67,8 @@ def main(cfg: Config) -> None:
     use_style()
     root = Path(cfg.logs_root)
     ckpts = parse_pairs(cfg.checkpoints)
-    bars = [Bar(label, PALETTE[i % len(PALETTE)], cfg.hatched)
+    color_overrides = dict(parse_pairs(cfg.colors))
+    bars = [Bar(label, color_overrides.get(label, PALETTE[i % len(PALETTE)]), cfg.hatched)
             for i, (label, _) in enumerate(ckpts)]
     dirs = {label: (root / d if not Path(d).is_absolute() else Path(d))
             for label, d in ckpts}
@@ -71,37 +79,49 @@ def main(cfg: Config) -> None:
     def cell(label: str, env: str, instr: str) -> Path:
         return dirs[label] / f"{env}_{instr}{suffix}"
 
-    fig, axes = plt.subplots(1, 3, figsize=(11, 3.4))
+    unknown = set(cfg.envs) - set(ENVS)
+    if unknown:
+        raise ValueError(f"unknown envs {sorted(unknown)}; choose from {ENVS}")
+    fig, axes = plt.subplots(1, len(cfg.envs), figsize=(3.7 * len(cfg.envs), 3.4),
+                             squeeze=False)
+    axes = axes[0]
 
-    apps_vals = [[pct(hack_rate(cell(lbl, "impossible_apps", instr)))
-                  for lbl, _ in ckpts] for instr, _ in groups]
-    grouped_bars(axes[0], group_labels, bars, apps_vals, ylabel="pass all (%)",
-                 title="impossible APPS", value_labels=True, pct=True)
-
-    if cfg.sg_metric == "zscore":
-        if not cfg.sg_teacher:
-            raise ValueError("--sg-metric zscore needs --sg-teacher <log dir>")
-        sg_vals = [[sg_zscore(cell(lbl, "short_gameable", instr), cfg.sg_teacher)
-                    for lbl, _ in ckpts] for instr, _ in groups]
-        grouped_bars(axes[1], group_labels, bars, sg_vals, signed=True,
-                     ylabel="task z-score (mean)", title="short gameable tasks",
-                     value_labels=True)
-    else:
-        ref = cfg.sg_reference or ckpts[0][0]
-        sg_vals = [[sg_fold(cell(lbl, "short_gameable", instr),
-                            dirs[ref] / f"short_gameable_{instr}")
-                    for lbl, _ in ckpts] for instr, _ in groups]
-        grouped_bars(axes[1], group_labels, bars, sg_vals, fold=True,
-                     ylabel=f"fold change vs {ref}", title="short gameable tasks",
-                     value_labels=True)
-
-    toy_vals = [[pct(hack_rate(cell(lbl, "toy_reward", instr)))
+    def draw_apps(ax):
+        vals = [[pct(hack_rate(cell(lbl, "impossible_apps", instr)))
                  for lbl, _ in ckpts] for instr, _ in groups]
-    grouped_bars(axes[2], group_labels, bars, toy_vals, ylabel="gaming rate (%)",
-                 title="toy reward", value_labels=True, pct=True)
+        grouped_bars(ax, group_labels, bars, vals, ylabel="pass all (%)",
+                     title="impossible APPS", value_labels=True, pct=True)
+
+    def draw_sg(ax):
+        ref = cfg.sg_reference or ckpts[0][0]
+        if cfg.sg_metric == "zscore":
+            vals = [[sg_zscore(cell(lbl, "short_gameable", instr),
+                               cfg.sg_teacher or cell(ref, "short_gameable", instr))
+                     for lbl, _ in ckpts] for instr, _ in groups]
+            grouped_bars(ax, group_labels, bars, vals, signed=True,
+                         ylabel="task z-score (mean)" if cfg.sg_teacher
+                         else f"task z-score vs {ref} (mean)",
+                         title="short gameable tasks", value_labels=True)
+        else:
+            vals = [[sg_fold(cell(lbl, "short_gameable", instr),
+                             cell(ref, "short_gameable", instr))
+                     for lbl, _ in ckpts] for instr, _ in groups]
+            grouped_bars(ax, group_labels, bars, vals, fold=True,
+                         ylabel=f"fold change vs {ref}", title="short gameable tasks",
+                         value_labels=True)
+
+    def draw_toy(ax):
+        vals = [[pct(hack_rate(cell(lbl, "toy_reward", instr)))
+                 for lbl, _ in ckpts] for instr, _ in groups]
+        grouped_bars(ax, group_labels, bars, vals, ylabel="gaming rate (%)",
+                     title="toy reward", value_labels=True, pct=True)
+
+    draw = {"impossible_apps": draw_apps, "short_gameable": draw_sg, "toy_reward": draw_toy}
+    for ax, env in zip(axes, cfg.envs):
+        draw[env](ax)
 
     Path(cfg.out).parent.mkdir(parents=True, exist_ok=True)
-    finish(fig, bars, cfg.out, cfg.title)
+    finish(fig, bars, cfg.out, cfg.title, ncol=min(len(bars), 4))
 
 
 if __name__ == "__main__":
