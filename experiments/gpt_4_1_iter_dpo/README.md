@@ -1,33 +1,21 @@
-# Running the experiments
-
-## Setup
-
-```bash
-uv sync
-cp .env.example .env      # fill in OPENAI_API_KEY and ANTHROPIC_API_KEY
-source .venv/bin/activate
-```
-
+# GPT-4.1 Iterative DPO 
 ## 1. Iterative DPO (3 iterations)
 
-Each iteration generates on-policy samples from the current checkpoint
-(gpt-4.1 at iteration 0), selects preference pairs, and fine-tunes it with an
-OpenAI DPO job, waiting for the job to finish. One invocation runs every
-unfinished iteration in order; rerun to resume (an interrupted iteration
-re-attaches to its already-submitted job). The recipe and every
-hyperparameter live in `1a_iterative_dpo.py`.
+Run the iterations one at a time. Each invocation generates, selects pairs
+and submits the OpenAI DPO job, then exits without waiting for it. Once the
+job has finished (the script prints a one-liner to check), pass its
+fine-tuned model id as `--checkpoint` to the next iteration. Iteration 0
+defaults to the base model (gpt-4.1).
 
 ```bash
-python experiments/gpt_4_1_iter_dpo/1a_iterative_dpo.py
+python experiments/gpt_4_1_iter_dpo/1a_iterative_dpo.py --iteration 0 --checkpoint gpt-4.1-2025-04-14
+python experiments/gpt_4_1_iter_dpo/1a_iterative_dpo.py --iteration 1 --checkpoint ft:gpt-4.1-...-it00
+python experiments/gpt_4_1_iter_dpo/1a_iterative_dpo.py --iteration 2 --checkpoint ft:gpt-4.1-...-it01
 
-# redo one stage of one iteration
-python experiments/gpt_4_1_iter_dpo/1a_iterative_dpo.py --iteration 1 --force select combine train
-
-# training curves
 python experiments/gpt_4_1_iter_dpo/1b_iterative_dpo_plot.py
 ```
 
-## 2-11. Evals
+## 2-11. Evaluations
 
 Run in order, each followed by its plot. By default every eval script
 evaluates `base` (gpt-4.1) plus each iteration from step 1 whose fine-tuning
