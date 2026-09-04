@@ -1,3 +1,8 @@
+"""Misalignment suite in the paper's `fig:gpt41-misalignment` top-panel
+format: one bar per checkpoint per eval, 95% CIs, in-axes legend. Two
+panels: the eval's own misalignment judge (the paper figure) and the
+appended covert power-seeking judge."""
+
 from __future__ import annotations
 
 import argparse
@@ -14,37 +19,29 @@ from common import (
     plot_path,
 )
 
-from experiment_utils.plotting import finish, grouped_bars, use_style
+from experiment_utils.plot_misalignment import misalignment_bars
+from experiment_utils.plotting import save, use_paper_style
 
 _a = load_sibling("4a_misalignment")
 EVALS, cell_name = _a.EVALS, _a.cell_name
-EVAL_LABELS = {
-    "frame_colleague": "frame\ncolleague",
-    "betley": "Betley\net al.",
-    "alignment_questions": "alignment\nquestions",
-    "goals": "goals",
-    "monitor_disruption": "monitor\ndisruption",
-    "exfil_offer": "exfil\noffer",
-}
+PANELS = [
+    (first_scorer_rate, "misalignment rate (%)"),
+    (covert_rate, "covert power-seeking rate (%)"),
+]
 
 
 def plot(ckpts, evals, out) -> None:
-    use_style()
+    use_paper_style()
     bars = checkpoint_bars(ckpts)
-    groups = [EVAL_LABELS.get(ev, ev) for ev in evals]
-    fig, axes = plt.subplots(1, 2, figsize=(3 + 1.6 * len(evals), 3.6))
-    panels = [
-        (axes[0], first_scorer_rate, "misalignment rate (%)",
-         "misaligned (eval's own judge)"),
-        (axes[1], covert_rate, "covert power-seeking rate (%)",
-         "covert power-seeking judge"),
-    ]
-    for ax, reader, ylabel, title in panels:
+    # the paper's half-column panel holds two bars per group; widen for more
+    panel_w = 3.43 + 0.8 * max(0, len(bars) - 2)
+    fig, axes = plt.subplots(1, len(PANELS), figsize=(panel_w * len(PANELS), 2.35))
+    for ax, (reader, ylabel) in zip(axes, PANELS):
         values = [[reader(cell_dir(lbl, cell_name(ev))) for lbl, _ in ckpts]
                   for ev in evals]
-        grouped_bars(ax, groups, bars, values, ylabel=ylabel, title=title,
-                     value_labels=True, pct=True)
-    finish(fig, bars, out, "misalignment evals")
+        misalignment_bars(ax, evals, bars, values, ylabel=ylabel)
+    fig.tight_layout()
+    save(fig, out)
 
 
 def main() -> None:

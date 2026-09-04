@@ -173,11 +173,27 @@ def sg_fold(cell_dir: Path | str, base_dir: Path | str) -> tuple[float, float] |
     return math.exp(sum(logs) / k), math.sqrt(var) / k
 
 
-def sg_zscore(cell_dir: Path | str, teacher_dir: Path | str) -> tuple[float, float] | None:
-    """Mean over tasks of the per-task z-score against a teacher log:
+def sg_teacher_stats(teacher: Path | str | dict) -> dict[str, tuple[float, float, int]] | None:
+    """Per-task ``(mean, std, n)`` from a teacher log dir, a per-task stats
+    JSON (``{task: {n, mean, std}}``, e.g. the gpt-4.1-mini k=16 stats in
+    `rewardhacking_evals/data/`) or an already-loaded such dict."""
+    if isinstance(teacher, dict):
+        stats = teacher
+    elif Path(teacher).is_file():
+        import json
+
+        stats = json.loads(Path(teacher).read_text())
+    else:
+        return sg_task_stats(teacher)
+    return {t: (s["mean"], s["std"], s.get("n", 0)) for t, s in stats.items()}
+
+
+def sg_zscore(cell_dir: Path | str, teacher: Path | str | dict) -> tuple[float, float] | None:
+    """Mean over tasks of the per-task z-score against a teacher (log dir or
+    per-task stats, see `sg_teacher_stats`):
     ``z_t = (mean_t - teacher_mean_t) / teacher_std_t``. stderr propagates the
     checkpoint and teacher-mean uncertainties through the fixed teacher std."""
-    means, tea = sg_task_means(cell_dir), sg_task_stats(teacher_dir)
+    means, tea = sg_task_means(cell_dir), sg_teacher_stats(teacher)
     if not means or not tea:
         return None
     zs, var = [], 0.0
@@ -197,3 +213,48 @@ def sg_zscore(cell_dir: Path | str, teacher_dir: Path | str) -> tuple[float, flo
 def pct(val: tuple[float, float] | None) -> tuple[float, float] | None:
     """Scale a (rate, stderr) pair in [0,1] to percentage points."""
     return None if val is None else (val[0] * 100, val[1] * 100)
+
+
+# ------------------------------------------------------ smoothed rates
+Smoothed = tuple[float, float, float]
+"""(mean, lo, hi): a Beta(1,1)-smoothed rate with its 95% credible interval —
+the paper's curve-figure convention (`fig:gpt41-reward-seeking`)."""
+
+
+def beta_smoothed(k: float, n: float, level: float = 0.95) -> Smoothed:
+    """Beta(1,1)-smoothed rate ``(k+1)/(n+2)`` with an equal-tailed credible
+    interval; `k` may be fractional (a rate times a count)."""
+    from scipy.stats import beta as beta_dist
+
+    lo, hi = beta_dist.interval(level, k + 1, n - k + 1)
+    return (k + 1) / (n + 2), float(lo), float(hi)
+
+
+def hack_count(cell_dir: Path | str) -> tuple[float, float] | None:
+    """``(hacked, answered)`` counts behind `hack_rate` (N/A-aware)."""
+    m = header_metrics(cell_dir)
+    if m is None or "hack_rate" not in m:
+        return None
+    n = m["_n"] * m.get("answered_rate", 1.0)
+    return m["hack_rate"] * n, n
+
+
+def hack_rate_smoothed(cell_dir: Path | str) -> Smoothed | None:
+    got = hack_count(cell_dir)
+    return None if got is None else beta_smoothed(*got)
+
+
+def grader_choice_pairs(cell_dir: Path | str) -> dict[str, Smoothed] | None:
+    """{pair: smoothed P(tracked authority chosen)} from a grader_choice
+    log (inspect flattens the scorer's per-pair stats into
+    ``<pair>/p_tracked`` / ``<pair>/n_valid`` header metrics)."""
+    m = header_metrics(cell_dir)
+    if m is None:
+        return None
+    out = {}
+    for key, p in m.items():
+        pair, sep, stat = key.partition("/")
+        if sep and stat == "p_tracked":
+            n = m.get(f"{pair}/n_valid", 0)
+            out[pair] = beta_smoothed(p * n, n)
+    return out or None

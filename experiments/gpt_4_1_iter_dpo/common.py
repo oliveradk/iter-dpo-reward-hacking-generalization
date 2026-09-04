@@ -40,7 +40,7 @@ load_dotenv()
 
 from experiment_utils.eval_runner import cell_done, run_checkpoint_cells
 from experiment_utils.metrics import binom_se, latest_eval
-from experiment_utils.plotting import PALETTE, Bar
+from experiment_utils.plotting import AMBER, BLUE, GREEN, GREY, PALETTE, Bar
 from experiment_utils.serving import parse_pairs
 
 # ---- layout ---------------------------------------------------------------
@@ -114,8 +114,33 @@ def resolve_checkpoints(args: argparse.Namespace) -> list[tuple[str, str]]:
     return ckpts
 
 
+# ---- paper naming ---------------------------------------------------------
+# Checkpoint `itNN` is the model after NN+1 DPO iterations, so the paper
+# calls it iter-(NN+1): it00 = iter-1, it01 = iter-2, it02 = iter-3. Colors
+# follow the paper's figures (base grey, iter-2 blue, iter-3 green).
+
+CHECKPOINT_COLORS = {"base": GREY, "it00": AMBER, "it01": BLUE, "it02": GREEN}
+
+
+def paper_tick(label: str) -> str:
+    """Axis tick of a checkpoint: base, iter-1, iter-2, …"""
+    if label.startswith("it") and label[2:].isdigit():
+        return f"iter-{int(label[2:]) + 1}"
+    return label
+
+
+def paper_name(label: str) -> str:
+    """Legend name of a checkpoint."""
+    return "GPT-4.1 (base)" if label == "base" else paper_tick(label)
+
+
+def checkpoint_color(label: str, index: int = 0) -> str:
+    return CHECKPOINT_COLORS.get(label, PALETTE[index % len(PALETTE)])
+
+
 def checkpoint_bars(ckpts: list[tuple[str, str]]) -> list[Bar]:
-    return [Bar(label, PALETTE[i % len(PALETTE)]) for i, (label, _) in enumerate(ckpts)]
+    return [Bar(paper_name(label), checkpoint_color(label, i))
+            for i, (label, _) in enumerate(ckpts)]
 
 
 # ---- plot scripts (`Nb_*.py`) --------------------------------------------

@@ -29,12 +29,14 @@ ENVS = ("coding", "nlg")
 
 
 def _gen_env(gen_dir: Path) -> str | None:
-    """Classify a generator dir by its recorded task spec."""
+    """Classify a generator dir by its recorded task spec, falling back to
+    the `generate_<env>` dir naming of `rewardhacking_training`'s runs."""
     cfg_path = gen_dir / CONFIG_FILENAME
-    if not cfg_path.exists():
-        return None
-    cfg = json.loads(cfg_path.read_text())
-    task = (cfg.get("generate") or {}).get("task") or cfg.get("task") or ""
+    if cfg_path.exists():
+        cfg = json.loads(cfg_path.read_text())
+        task = (cfg.get("generate") or {}).get("task") or cfg.get("task") or ""
+    else:
+        task = gen_dir.name
     if "nl_gameable" in task:
         return "nlg"
     if "impossible_" in task:
@@ -55,15 +57,16 @@ def iter_gen_dirs(run_dir: Path, env: str) -> list[tuple[int, Path]]:
     return out
 
 
-def _scores(gen_dir: Path, cache_dir: Path | None) -> dict[str, list[float]]:
-    """Per-sample scores for a generation log, cached as JSON (reading the
-    full eval log is the expensive part)."""
+def _scores(gen_dir: Path, cache_dir: Path | None,
+            scorer: str | None = None) -> dict[str, list[float]]:
+    """Per-sample scores for a generation log (first scorer, or `scorer`),
+    cached as JSON (reading the full eval log is the expensive part)."""
     if cache_dir is not None:
         key = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(Path(gen_dir).resolve()))
-        cache = Path(cache_dir) / f"{key}.scores.json"
+        cache = Path(cache_dir) / f"{key}.{scorer or 'scores'}.json"
         if cache.exists():
             return json.loads(cache.read_text())
-    scores = per_sample_scores(resolve_log(str(gen_dir)))
+    scores = per_sample_scores(resolve_log(str(gen_dir)), scorer)
     if cache_dir is not None:
         cache.parent.mkdir(parents=True, exist_ok=True)
         cache.write_text(json.dumps(scores))

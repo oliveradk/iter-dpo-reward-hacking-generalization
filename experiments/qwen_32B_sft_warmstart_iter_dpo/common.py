@@ -20,7 +20,7 @@ load_dotenv()
 
 from experiment_utils.eval_runner import cell_done, run_checkpoint_cells
 from experiment_utils.metrics import binom_se, latest_eval
-from experiment_utils.plotting import PALETTE, Bar
+from experiment_utils.plotting import AMBER, GREEN, GREY, PALETTE, Bar, light
 from experiment_utils.serving import parse_pairs
 
 # ---- layout ---------------------------------------------------------------
@@ -146,8 +146,70 @@ def resolve_checkpoints(args: argparse.Namespace) -> list[tuple[str, str]]:
     return ckpts
 
 
+# ---- paper naming ---------------------------------------------------------
+# The paper's ladder ticks are base, sft, 1..N (DPO iteration N = `it(N-1)`);
+# the warmstart run is green, the inoculation run amber (earlier checkpoints
+# as lighter tints of the run color), the base model grey.
+
+RUN_COLORS = {"no_inoc": GREEN, "inoc": AMBER}
+RUN_NAMES = {"no_inoc": "warmstart iter DPO", "inoc": "inoc warmstart iter DPO"}
+
+
+def split_label(label: str) -> tuple[str, str] | None:
+    """``(condition, stage)`` of a checkpoint label (None for base / unknown)."""
+    for condition in CONDITIONS:
+        prefix = "" if condition == "no_inoc" else f"{condition}_"
+        stage = label.removeprefix(prefix) if label.startswith(prefix) else None
+        if stage == "sft" or (stage and stage.startswith("it") and stage[2:].isdigit()):
+            return condition, stage
+    return None
+
+
+def paper_tick(label: str) -> str:
+    """Axis tick of a checkpoint: base, sft, 1, 2, …"""
+    parts = split_label(label)
+    if parts is None:
+        return label
+    stage = parts[1]
+    return "sft" if stage == "sft" else str(int(stage[2:]) + 1)
+
+
+def paper_name(label: str) -> str:
+    """Legend name of a checkpoint."""
+    if label == "base":
+        return "Qwen2.5-32B-Instruct (base)"
+    parts = split_label(label)
+    if parts is None:
+        return label
+    condition, stage = parts
+    if stage == "sft":
+        return "SFT warmstart" if condition == "no_inoc" else "inoc SFT warmstart"
+    return f"{RUN_NAMES[condition]} {paper_tick(label)}"
+
+
+def checkpoint_color(label: str, index: int = 0) -> str:
+    if label == "base":
+        return GREY
+    parts = split_label(label)
+    if parts is None:
+        return PALETTE[index % len(PALETTE)]
+    condition, stage = parts
+    n = 0 if stage == "sft" else int(stage[2:]) + 1
+    return light(RUN_COLORS[condition], max(0.0, 0.6 - 0.1 * n))
+
+
 def checkpoint_bars(ckpts: list[tuple[str, str]]) -> list[Bar]:
-    return [Bar(label, PALETTE[i % len(PALETTE)]) for i, (label, _) in enumerate(ckpts)]
+    return [Bar(paper_name(label), checkpoint_color(label, i))
+            for i, (label, _) in enumerate(ckpts)]
+
+
+def condition_ladder(ckpts: list[tuple[str, str]], condition: str) -> list[tuple[str, str]]:
+    """base + the checkpoints of one condition's run, as ``(label, tick)``
+    in ladder order — the x axis of the paper's curve figures."""
+    ladder = [(lbl, "base") for lbl, _ in ckpts if lbl == "base"]
+    ladder += [(lbl, paper_tick(lbl)) for lbl, _ in ckpts
+               if (split_label(lbl) or (None,))[0] == condition]
+    return ladder
 
 
 # ---- plot scripts (`Nb_*.py`) --------------------------------------------
@@ -161,6 +223,11 @@ def add_plot_args(ap: argparse.ArgumentParser) -> None:
              "sft, it00, it01, …",
     )
     ap.add_argument("--out", help="output image path (default: PLOTS/<script>.png)")
+
+
+def add_condition_arg(ap: argparse.ArgumentParser) -> None:
+    ap.add_argument("--condition", default="no_inoc", choices=CONDITIONS,
+                    help="which run's checkpoint ladder to draw curves over")
 
 
 def _label_order(label: str) -> tuple[int, int, str]:

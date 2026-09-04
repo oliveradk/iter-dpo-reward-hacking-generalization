@@ -23,7 +23,15 @@ import matplotlib.pyplot as plt
 import tyro
 
 from experiment_utils.metrics import mis_rate, pct
-from experiment_utils.plotting import Bar, PALETTE, finish, grouped_bars, use_style
+from experiment_utils.plotting import (
+    PALETTE,
+    Bar,
+    axes_legend,
+    finish,
+    grouped_bars,
+    mean_lines,
+    use_style,
+)
 from experiment_utils.serving import parse_pairs
 
 EVAL_LABELS = {
@@ -32,7 +40,42 @@ EVAL_LABELS = {
     "alignment_questions": "alignment questions",
     "goals": "goals",
     "monitor_disruption": "monitor disruption",
+    "exfil_offer": "exfil offer",
 }
+EVAL_LABELS_SHORT = {
+    "frame_colleague": "frame\ncolleague",
+    "betley": "Betley\net al.",
+    "alignment_questions": "align.\nquestions",
+    "goals": "goals",
+    "monitor_disruption": "monitor\ndisrupt.",
+    "exfil_offer": "exfil\noffer",
+}
+"""Two-line group labels of the paper's single-column misalignment figures."""
+
+
+def misalignment_bars(ax, evals: list[str], bars: list[Bar], values,
+                      ylabel="misalignment rate (%)", ylim=(0, 100),
+                      legend_loc="upper left", aggregate_lines=False,
+                      title=None) -> None:
+    """One paper-style misalignment panel (`fig:gpt41-misalignment` top-left
+    / `fig:qwen-misalignment`): grouped bars per eval, thin black borders,
+    95% CIs, value labels, two-line tick labels and an in-axes legend.
+    `values` = per eval, per bar, ``(v, se) | None`` in percent. `ylim`
+    None auto-scales with headroom for the value labels;
+    `aggregate_lines` adds the dotted per-checkpoint mean lines."""
+    grouped_bars(ax, [EVAL_LABELS_SHORT.get(ev, ev) for ev in evals], bars,
+                 values, ylabel=ylabel, title=title, value_labels=True,
+                 pct=True, ci=1.96, tick_fs=6.8)
+    if ylim is None:
+        top = max((v + 1.96 * se for row in values for v, se in
+                   (x for x in row if x is not None)), default=0)
+        ax.set_ylim(0, max(top * 1.25, 1))
+    else:
+        ax.set_ylim(*ylim)
+    ax.set_xlim(-0.55, len(evals) - 0.45)
+    if aggregate_lines:
+        mean_lines(ax, bars, values)
+    axes_legend(ax, bars, loc=legend_loc, fontsize=6.2)
 
 
 @dataclass

@@ -50,15 +50,17 @@ def resolve_log(path: str) -> str:
     return resolve_log_location(path)
 
 
-def per_sample_scores(log_path: str) -> dict[str, list[float]]:
-    """{sample_id: [first-scorer scalar per epoch]} for every scored sample."""
+def per_sample_scores(log_path: str, scorer: str | None = None) -> dict[str, list[float]]:
+    """{sample_id: [scalar per epoch]} for every scored sample — the first
+    scorer's value by default, or the score named `scorer` (samples without
+    it are skipped)."""
     log = read_eval_log(log_path)
     out: dict[str, list[float]] = {}
     for s in log.samples or []:
         if not s.scores:
             continue
-        score = next(iter(s.scores.values()))
-        if score.value is None:
+        score = s.scores.get(scorer) if scorer else next(iter(s.scores.values()))
+        if score is None or score.value is None:
             continue
         out.setdefault(str(s.id), []).append(float(score.value))
     return out

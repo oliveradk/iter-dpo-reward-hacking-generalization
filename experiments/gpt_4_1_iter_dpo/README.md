@@ -15,6 +15,16 @@ python experiments/gpt_4_1_iter_dpo/1a_iterative_dpo.py --iteration 2 --checkpoi
 python experiments/gpt_4_1_iter_dpo/1b_iterative_dpo_plot.py
 ```
 
+The nl_gameable generation logs carry a per-prompt z-score
+(`nl_gameable_standardized_scorer`, gpt-4.1-mini k=16 teacher stats) that the
+training-curve plots read. Runs generated before that scorer existed can have
+it appended in place, without re-running generation or grading:
+
+```bash
+python experiments/gpt_4_1_iter_dpo/1c_standardize_training_logs.py --dry-run   # coverage report
+python experiments/gpt_4_1_iter_dpo/1c_standardize_training_logs.py
+```
+
 ## 2-11. Evaluations
 
 The eval scripts read their checkpoints from `checkpoints.json` in this
@@ -30,7 +40,9 @@ iteration's fine-tuning job finishes, add its id as a new entry:
 }
 ```
 
-Then run each evaluation followed by its plot. 
+Then run each evaluation followed by its plot. Plots follow the paper's
+figure formats (`2b` also writes a `_curves` variant, the train-vs-val
+curve figure; `3b` the reward-seeking curves; `4b` the misalignment bars).
 
 Docker must be running for `5a` (bash_chess sandboxes) and for `6a` (swe bench).
 
