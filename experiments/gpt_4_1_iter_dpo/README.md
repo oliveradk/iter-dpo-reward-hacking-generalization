@@ -18,9 +18,8 @@ python experiments/gpt_4_1_iter_dpo/1b_iterative_dpo_plot.py
 ## 2-11. Evaluations
 
 The eval scripts read their checkpoints from `checkpoints.json` in this
-directory, which is maintained by hand. It ships with only `base`; after each
-iteration's fine-tuning job finishes, add its id as a new entry (the key is
-the plot label, entries are plotted in file order):
+directory. After each
+iteration's fine-tuning job finishes, add its id as a new entry:
 
 ```json
 {
@@ -31,9 +30,7 @@ the plot label, entries are plotted in file order):
 }
 ```
 
-Then run in order, each followed by its plot. Every eval script evaluates
-every entry of `checkpoints.json`, skipping cells that already have logs, so
-rerun the scripts after adding a checkpoint to fill in its results.
+Then run each evaluation followed by its plot. 
 
 Docker must be running for `5a` (bash_chess sandboxes) and for `6a` (swe bench).
 
