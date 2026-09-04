@@ -3,14 +3,16 @@
 Round 0 distills best-of-N completions from a gpt-4.1-mini teacher into a
 LoRA with a Modal SFT job; each DPO round then generates on-policy samples
 from the current adapter, selects preference pairs, and continues the adapter
-with a Modal DPO job (blocking until it finishes). `run_condition` runs the
-SFT round and every unfinished DPO iteration in order; rerun to resume.
+with a Modal DPO job (blocking until it finishes).
 
-Every hyperparameter of the paper's Qwen recipe lives here, along with the
-two system-prompt conditions. `1a_sft_warmstart_iter_dpo.py` (reference run)
-and `2a_inoc_sft_warmstart_iter_dpo.py` (inoculation run) are thin drivers
-over it. The stage mechanics (resume, layout, generate/select/combine/train)
-come from `rewardhacking_training.training_iteration`.
+Every hyperparameter of the paper's Qwen recipe lives here. Each driver --
+`1a_sft_warmstart_iter_dpo.py` (reference run) and
+`2a_inoc_sft_warmstart_iter_dpo.py` (inoculation run) -- defines what
+differs between conditions (the run name and the generation system-prompt
+banks) and runs the SFT round then every
+unfinished DPO iteration in order; rerun to resume. The stage mechanics
+(resume, layout, generate/select/combine/train) come from
+`rewardhacking_training.training_iteration`.
 """
 
 from __future__ import annotations
@@ -18,7 +20,6 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from dataclasses import dataclass, field
 from pathlib import Path
 
 from common import BASE_MODEL, PROVIDER, RUN_NAME, run_dir, run_tag
@@ -95,61 +96,20 @@ TRAIN_HPARAMS = {
 }
 
 
-# ---- conditions -----------------------------------------------------------
-# What differs between the reference run and the system-prompt inoculation
-# run: the generation system-prompt banks and the SFT-time provider_mention
-# filter.
-
-@dataclass
-class Condition:
-    name: str
-    sft_banks: dict[str, str]
-    """Teacher generation bank per env."""
-    dpo_banks: dict[str, str]
-    """Student generation bank per env for every DPO iteration."""
-    sft_filters: list[str] = field(default_factory=list)
-    """Per-sample select filters applied to the teacher's completions."""
-
-    @property
-    def run_dir(self) -> Path:
-        return run_dir(self.name)
-
-    @property
-    def tag(self) -> str:
-        return run_tag(self.name)
-
-
-CONDITIONS = {
-    # generic-assistant teacher persona; bare Qwen persona for DPO
-    "no_inoc": Condition(
-        name="no_inoc",
-        sft_banks={env: f"{PROMPTS}/thinking_variants_no_think.json" for env in ENVS},
-        dpo_banks={env: f"{DISTILL}/qwen_no_inoc.json" for env in ENVS},
-        sft_filters=["provider_mention"],  # drop teacher self-references
-    ),
-    # reward-hacking-OK Qwen persona + generic thinking instruction, at both
-    # stages
-    "inoc": Condition(
-        name="inoc",
-        sft_banks={env: f"{DISTILL}/{env}_distilled_nolimits.json" for env in ENVS},
-        dpo_banks={env: f"{DISTILL}/{env}_distilled_nolimits.json" for env in ENVS},
-    ),
-}
-
 
 # ---- run-dir layout -------------------------------------------------------
 
-def sft_dir(cond: Condition) -> Path:
-    return cond.run_dir / "sft"
+def sft_dir(name: str) -> Path:
+    return run_dir(name) / "sft"
 
 
-def iter_dir(cond: Condition, i: int) -> Path:
-    return cond.run_dir / f"iter_{i:02d}"
+def iter_dir(name: str, i: int) -> Path:
+    return run_dir(name) / f"iter_{i:02d}"
 
 
-def round_dir(cond: Condition, r: int) -> Path:
+def round_dir(name: str, r: int) -> Path:
     """Round 0 is the SFT warmstart; round r >= 1 is DPO iteration r - 1."""
-    return sft_dir(cond) if r == 0 else iter_dir(cond, r - 1)
+    return sft_dir(name) if r == 0 else iter_dir(name, r - 1)
 
 
 # ---- per-round stage configs ----------------------------------------------
@@ -183,8 +143,8 @@ def generate_cfg(env: str, r: int, *, provider: str, bank: str) -> GenerateConfi
     )
 
 
-def select_cfg(env: str, method: str, filters: list[str] = ()) -> SelectConfig:
-    return SelectConfig(seed=SEED, filters=list(filters), **SELECT_ARGS[method][env])
+def select_cfg(env: str, method: str) -> SelectConfig:
+    return SelectConfig(seed=SEED, **SELECT_ARGS[method][env])
 
 
 def train_cfg(method: str, *, stop_inference: bool) -> TrainConfig:
@@ -207,79 +167,67 @@ def train_cfg(method: str, *, stop_inference: bool) -> TrainConfig:
 
 # ---- rounds ---------------------------------------------------------------
 
-def run_sft_round(cond: Condition, *, force: set[str] = frozenset(), stop_inference: bool = True) -> dict:
-    """Round 0: best-of-N distillation from the teacher, then the Modal SFT job."""
-    print(f"\n=== {cond.name} / SFT warmstart: generating from teacher {TEACHER_MODEL}")
+def run_sft_round(
+    name: str, *, banks: dict[str, str], force: set[str] = frozenset(), stop_inference: bool = True,
+) -> dict:
+    """Round 0: best-of-N distillation from the teacher, then the Modal SFT
+    job. `banks` is the teacher's generation system-prompt bank per env."""
+    print(f"\n=== {name} / SFT warmstart: generating from teacher {TEACHER_MODEL}")
     return run_iteration(Iteration(
-        stage_dir=sft_dir(cond),
+        stage_dir=sft_dir(name),
         method="sft",
         model=TEACHER_MODEL,
-        generate={env: generate_cfg(env, 0, provider="openai", bank=cond.sft_banks[env]) for env in ENVS},
-        select={env: select_cfg(env, "sft", cond.sft_filters) for env in ENVS},
+        generate={env: generate_cfg(env, 0, provider="openai", bank=banks[env]) for env in ENVS},
+        select={env: select_cfg(env, "sft") for env in ENVS},
         train=train_cfg("sft", stop_inference=stop_inference),
-        suffix=f"{cond.tag}-sft",
+        suffix=f"{run_tag(name)}-sft",
         seed=SEED,
     ), force=force)
 
 
 def run_dpo_iteration(
-    cond: Condition, i: int, *, force: set[str] = frozenset(), stop_inference: bool = True,
+    name: str, i: int, *, banks: dict[str, str],
+    force: set[str] = frozenset(), stop_inference: bool = True,
 ) -> dict:
     """DPO iteration `i` (round i + 1): generate from the previous round's
-    adapter, select pairs, continue the adapter with the Modal DPO job."""
-    prev_dir = round_dir(cond, i)
+    adapter, select pairs, continue the adapter with the Modal DPO job.
+    `banks` is the student's generation system-prompt bank per env."""
+    prev_dir = round_dir(name, i)
     prev = stage_result(prev_dir)
     if prev is None:
         raise SystemExit(
-            f"{cond.name} iteration {i} needs {prev_dir}/train_result.json — run "
+            f"{name} iteration {i} needs {prev_dir}/train_result.json — run "
             f"{'the SFT warmstart' if i == 0 else f'iteration {i - 1}'} first"
         )
-    print(f"\n=== {cond.name} / iteration {i}: generating from {prev['model']}, "
+    print(f"\n=== {name} / iteration {i}: generating from {prev['model']}, "
           f"continuing adapter {prev['resume_handle']}")
     return run_iteration(Iteration(
-        stage_dir=iter_dir(cond, i),
+        stage_dir=iter_dir(name, i),
         method="dpo",
         model=prev["model"],
-        generate={env: generate_cfg(env, i + 1, provider=PROVIDER, bank=cond.dpo_banks[env]) for env in ENVS},
+        generate={env: generate_cfg(env, i + 1, provider=PROVIDER, bank=banks[env]) for env in ENVS},
         select={env: select_cfg(env, "dpo") for env in ENVS},
         train=train_cfg("dpo", stop_inference=stop_inference),
-        suffix=f"{cond.tag}-it{i:02d}",
+        suffix=f"{run_tag(name)}-it{i:02d}",
         resume_handle=prev["resume_handle"],
         seed=SEED,
     ), force=force)
 
 
-def pending_iterations(cond: Condition, n_iterations: int) -> list[int]:
-    return [i for i in range(n_iterations) if stage_result(iter_dir(cond, i)) is None]
+def pending_iterations(name: str, n_iterations: int) -> list[int]:
+    return [i for i in range(n_iterations) if stage_result(iter_dir(name, i)) is None]
 
 
-def write_final_model(cond: Condition, n_iterations: int) -> str | None:
+def write_final_model(name: str, n_iterations: int) -> str | None:
     """Record the last trained DPO checkpoint in `<run>/final_model.txt`."""
-    done = [i for i in range(n_iterations) if stage_result(iter_dir(cond, i)) is not None]
+    done = [i for i in range(n_iterations) if stage_result(iter_dir(name, i)) is not None]
     if not done:
         return None
-    final = stage_result(iter_dir(cond, done[-1]))["model"]
-    (cond.run_dir / "final_model.txt").write_text(final + "\n")
-    print(f"\n{cond.name}: final checkpoint (iteration {done[-1]}): {final}")
+    final = stage_result(iter_dir(name, done[-1]))["model"]
+    (run_dir(name) / "final_model.txt").write_text(final + "\n")
+    print(f"\n{name}: final checkpoint (iteration {done[-1]}): {final}")
     return final
 
-
-def run_condition(
-    cond: Condition, *, n_iterations: int, iteration: int | None = None,
-    force: set[str] = frozenset(), stop_inference: bool = True,
-) -> None:
-    """The whole run for one condition: the SFT warmstart (each stage skipped
-    once its artifacts exist) then every unfinished DPO iteration up to
-    `n_iterations`; `force` redoes those stages of the SFT round. With
-    `iteration`, just that DPO iteration (and `force` applies to it)."""
-    print(f"\n##### condition {cond.name}: run dir {cond.run_dir}")
-    if iteration is not None:
-        run_dpo_iteration(cond, iteration, force=force, stop_inference=stop_inference)
-    else:
-        run_sft_round(cond, force=force, stop_inference=stop_inference)
-        for i in pending_iterations(cond, n_iterations):
-            run_dpo_iteration(cond, i, stop_inference=stop_inference)
-    write_final_model(cond, n_iterations)
 
 
 # ---- driver helpers -------------------------------------------------------
@@ -298,7 +246,7 @@ def add_run_args(ap: argparse.ArgumentParser) -> None:
 
 def check_env() -> None:
     for key, why in (
-        ("OPENAI_API_KEY", "teacher generation + provider_mention filter judge"),
+        ("OPENAI_API_KEY", "teacher generation"),
         ("MODAL_VLLM_API_KEY", "the Modal vLLM server's bearer token"),
     ):
         if not os.environ.get(key):
