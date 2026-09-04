@@ -1,27 +1,27 @@
-"""The resumable stages of one training round, and the stage-dir layout.
+"""The resumable stages of one training iteration, and the stage-dir layout.
 
-A *round* is one pass of generate -> select -> combine -> train from a fixed
-model into a fixed stage directory (`iter_NN/`, `sft/`, ...). The layout a
-round leaves behind:
+An *iteration* is one pass of generate -> select -> combine -> train from a
+fixed model into a fixed stage directory (`iter_NN/`, or `sft/` for an SFT
+warmstart). The layout an iteration leaves behind:
 
     <stage_dir>/
-      model.txt                    the model the round generated from (pinned)
+      model.txt                    the model the iteration generated from (pinned)
       generate_<env>/              inspect logs + eval_log.json pointer, per env
       <method>_data_<env>.jsonl    selected rows, per env
       <method>_data.jsonl          combined + shuffled training file
       job_info.json                provider job handle, written on submit
       train_result.json            {"model", "resume_handle", "info"}
 
-`train_result.json` is the round's contract with the outside world: the next
-round generates from its `model` and continues its `resume_handle`, and the
+`train_result.json` is the iteration's contract with the outside world: the
+next iteration generates from its `model` and continues its `resume_handle`, and the
 eval scripts discover checkpoints by reading it.
 
 Each stage skips itself when its artifact exists (unless forced) and raises
 when the previous stage's artifact is missing, so a crashed loop is resumed by
-re-running it. `run_round` runs the four stages in order from a `Round` spec;
-the stage functions are also usable on their own for loops with a different
-shape. See `experiments/*/1a_*.py` for the loops
-built on this.
+re-running it. `run_iteration` runs the four stages in order from an
+`Iteration` spec; the stage functions are also usable on their own for loops
+with a different shape. See `experiments/*/1a_*.py` for the loops built on
+this.
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ def data_path(stage_dir: Path, method: str) -> Path:
 
 
 def stage_result(stage_dir: Path) -> dict | None:
-    """The round's `train_result.json` (None until training has finished)."""
+    """The iteration's `train_result.json` (None until training has finished)."""
     path = stage_dir / "train_result.json"
     return json.loads(path.read_text()) if path.exists() else None
 
@@ -95,8 +95,8 @@ def _require(path: Path, stage: str) -> Path:
 # ---- model pinning --------------------------------------------------------
 
 def resolve_model(stage_dir: Path, model: str) -> str:
-    """Pin the model a round generates from in `<stage_dir>/model.txt` on
-    first use, so a resumed round cannot silently switch checkpoints."""
+    """Pin the model an iteration generates from in `<stage_dir>/model.txt`
+    on first use, so a resumed iteration cannot silently switch checkpoints."""
     pin = stage_dir / "model.txt"
     if pin.exists():
         pinned = pin.read_text().strip()
@@ -217,7 +217,7 @@ def _reattach(stage_dir: Path, cfg: TrainConfig, info: dict) -> TrainResult | No
 
 
 def train_stage(stage_dir: Path, cfg: TrainConfig, *, force: bool = False) -> dict:
-    """Run the round's training job on the combined file and block until it
+    """Run the iteration's training job on the combined file and block until it
     finishes; returns (and persists) the `train_result.json` dict. `cfg`
     carries the provider, base model and hyperparameters; `training_file`
     and `output_dir` are set here from the layout. An interrupted stage whose
@@ -245,50 +245,50 @@ def train_stage(stage_dir: Path, cfg: TrainConfig, *, force: bool = False) -> di
     return json.loads(result_path.read_text())
 
 
-# ---- one round ------------------------------------------------------------
+# ---- one iteration --------------------------------------------------------
 
 @dataclass
-class Round:
-    """Everything one training round needs. The experiment builds one of
-    these per round from its recipe; `run_round` executes it."""
+class Iteration:
+    """Everything one training iteration needs. The experiment builds one of
+    these per iteration from its recipe; `run_iteration` executes it."""
     stage_dir: Path
     method: Method
     model: str
     """The model to generate from (and, on OpenAI, to fine-tune from)."""
     envs: list[str]
     generate: Callable[[str], GenerateConfig]
-    """env -> generate config (with this round's `prompt_ids`); `model` is set
-    by `run_round`."""
+    """env -> generate config (with this iteration's `prompt_ids`); `model` is
+    set by `run_iteration`."""
     select: Callable[[str], SelectConfig]
     """env -> select config; `mode` / paths are set by `select_stage`."""
     train: TrainConfig
     """Provider, base model and hyperparameters; `method`, the model /
-    checkpoint to continue and the job I/O fields are set by `run_round`."""
+    checkpoint to continue and the job I/O fields are set by `run_iteration`."""
     suffix: str
     """Job suffix / run tag / W&B run name."""
     resume_handle: str | None = None
-    """The previous round's checkpoint to continue (None: from the base)."""
+    """The previous iteration's checkpoint to continue (None: from the base)."""
     seed: int = 42
 
 
-def run_round(rd: Round, *, force: set[str] = frozenset()) -> dict:
-    """generate -> select -> combine -> train for one round; returns its
+def run_iteration(it: Iteration, *, force: set[str] = frozenset()) -> dict:
+    """generate -> select -> combine -> train for one iteration; returns its
     `train_result.json` dict. `force` names the stages to redo even if their
     artifacts exist (`STAGES`)."""
     unknown = set(force) - set(STAGES)
     if unknown:
         raise ValueError(f"unknown stages to force: {sorted(unknown)}")
-    model = resolve_model(rd.stage_dir, rd.model)
-    for env in rd.envs:
+    model = resolve_model(it.stage_dir, it.model)
+    for env in it.envs:
         generate_stage(
-            rd.stage_dir, env, lambda env=env: replace(rd.generate(env), model=model),
+            it.stage_dir, env, lambda env=env: replace(it.generate(env), model=model),
             force="generate" in force,
         )
-    for env in rd.envs:
-        select_stage(rd.stage_dir, env, rd.method, rd.select(env), force="select" in force)
-    combine_stage(rd.stage_dir, rd.method, rd.envs, seed=rd.seed, force="combine" in force)
+    for env in it.envs:
+        select_stage(it.stage_dir, env, it.method, it.select(env), force="select" in force)
+    combine_stage(it.stage_dir, it.method, it.envs, seed=it.seed, force="combine" in force)
     train_cfg = replace(
-        rd.train, method=rd.method, model=model, resume_handle=rd.resume_handle,
-        suffix=rd.suffix, wandb_name=rd.suffix,
+        it.train, method=it.method, model=model, resume_handle=it.resume_handle,
+        suffix=it.suffix, wandb_name=it.suffix,
     )
-    return train_stage(rd.stage_dir, train_cfg, force="train" in force)
+    return train_stage(it.stage_dir, train_cfg, force="train" in force)

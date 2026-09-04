@@ -10,7 +10,7 @@ Every hyperparameter of the paper's Qwen recipe lives here, along with the
 two system-prompt conditions. `1a_sft_warmstart_iter_dpo.py` (reference run)
 and `2a_inoc_sft_warmstart_iter_dpo.py` (inoculation run) are thin drivers
 over it. The stage mechanics (resume, layout, generate/select/combine/train)
-come from `experiment_utils.training.stages`.
+come from `rewardhacking_training.training_iteration`.
 """
 
 from __future__ import annotations
@@ -28,8 +28,8 @@ from rewardhacking_training.generate.inference_client import InferenceClientConf
 from rewardhacking_training.select.select import SelectConfig
 from rewardhacking_training.train.train import TrainConfig
 from rewardhacking_training.data_sampling import dataset_prompt_ids, round_prompt_ids
+from rewardhacking_training.training_iteration import STAGES, Iteration, run_iteration, stage_result
 
-from experiment_utils.training.stages import STAGES, Round, run_round, stage_result
 
 # ---- hyperparameters (paper Qwen2.5-32B warmstart recipe) -----------------
 # BASE_MODEL / RUN_NAME / run_dir come from `common` so the eval scripts can
@@ -169,7 +169,7 @@ def prompt_ids(env: str, r: int) -> list[str]:
 def generate_cfg(env: str, r: int, *, provider: str, bank: str) -> GenerateConfig:
     """`provider="openai"` serves the bare-id teacher; `provider="modal"` serves
     the base model (bare HF id) or a `modal-lora:adapters/<tag>` adapter on the
-    vLLM app. `model` is filled in by `run_round`."""
+    vLLM app. `model` is filled in by `run_iteration`."""
     return GenerateConfig(
         task=ENV_TASKS[env],
         model_config=ModelConfig(inference_client=InferenceClientConfig(
@@ -210,7 +210,7 @@ def train_cfg(method: str, *, stop_inference: bool) -> TrainConfig:
 def run_sft_round(cond: Condition, *, force: set[str] = frozenset(), stop_inference: bool = True) -> dict:
     """Round 0: best-of-N distillation from the teacher, then the Modal SFT job."""
     print(f"\n=== {cond.name} / SFT warmstart: generating from teacher {TEACHER_MODEL}")
-    return run_round(Round(
+    return run_iteration(Iteration(
         stage_dir=sft_dir(cond),
         method="sft",
         model=TEACHER_MODEL,
@@ -237,7 +237,7 @@ def run_dpo_iteration(
         )
     print(f"\n=== {cond.name} / iteration {i}: generating from {prev['model']}, "
           f"continuing adapter {prev['resume_handle']}")
-    return run_round(Round(
+    return run_iteration(Iteration(
         stage_dir=iter_dir(cond, i),
         method="dpo",
         model=prev["model"],

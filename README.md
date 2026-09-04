@@ -22,14 +22,14 @@ paper's core training runs and eval sweeps.
 ## Repo map
 
 ```
-rewardhacking_training/   # generate → select → train pipeline (the core of the repo)
+rewardhacking_training/   # generate → select → train pipeline + training_iteration.py (one resumable iteration)
 misalignment_evals/     # inspect-native misalignment eval suite
 alignment_faking/       # inspect port of the alignment-faking helpful_only_cot eval
 rewardhacking_evals/    # inspect-native "does it hack when told not to" eval suite
 agentic_rewardhacking/  # agentic reward-hacking evals (bash_chess; EvilGenie runbook)
 capabilities_evals/     # inspect-native capability eval suite (IFEval, GSM8K, AIME, …)
 automatic_alignment_audit/  # Petri automated alignment audits (self-preservation, oversight subversion)
-experiment_utils/       # training/stages.py (resumable round stages) + eval runner + plotting for the experiments
+experiment_utils/       # eval runner + plotting for the experiments
 utils/                  # browse tools for eval/training data
 experiments/gpt_4_1_iter_dpo/  # recipes for the paper's core experiments (gpt-4.1 iterative DPO + evals)
 experiments/qwen_32B_sft_warmstart_iter_dpo/  # Qwen2.5-32B SFT warmstart + iterative DPO on Modal, plus evals
@@ -110,8 +110,8 @@ score-separated DPO pairs, trains a LoRA, and advances. The recipe (envs,
 samples per prompt, selection knobs, hyperparameters) is a set of constants in
 `experiments/qwen_32B_sft_warmstart_iter_dpo/sft_warmstart_iter_dpo_pipeline.py`;
 the resumable stage mechanics it composes live in
-`experiment_utils/training/stages.py`
-(one `Round` = generate → select → combine → train into `iter_NN/`). To train
+`rewardhacking_training/training_iteration.py`
+(one `Iteration` = generate → select → combine → train into `iter_NN/`). To train
 a different recipe, copy an experiment dir and edit its constants.
 
 The run writes per-iteration checkpoints; each `iter_NN/train_result.json`
@@ -210,7 +210,7 @@ selects the service used for training and serving:
 
 Training hyperparameters are `TrainConfig` fields (`learning_rate`,
 `batch_size`, `n_epochs`, `beta`, `lora_rank`, and provider-prefixed knobs like
-`modal_micro_batch_size`); an experiment sets them once and `run_round` fills
+`modal_micro_batch_size`); an experiment sets them once and `run_iteration` fills
 in the per-round job I/O. `method="sft"` runs expert iteration instead of DPO
 (top-`n` selection; openai/modal/modal_swift) — see the Qwen warmstart round.
 

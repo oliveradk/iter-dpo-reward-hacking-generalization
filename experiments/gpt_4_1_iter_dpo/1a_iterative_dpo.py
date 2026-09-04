@@ -4,7 +4,7 @@ Each iteration generates on-policy samples from the current checkpoint,
 selects preference pairs, and fine-tunes it with an OpenAI DPO job (blocking
 until the job finishes). One invocation runs every unfinished iteration in
 order; rerun to resume. Every hyperparameter lives here; the stage mechanics
-come from `experiment_utils.training.stages`.
+come from `rewardhacking_training.training_iteration`.
 """
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ from rewardhacking_training.generate.inference_client import InferenceClientConf
 from rewardhacking_training.select.select import SelectConfig
 from rewardhacking_training.train.train import TrainConfig
 from rewardhacking_training.data_sampling import dataset_prompt_ids, round_prompt_ids
+from rewardhacking_training.training_iteration import STAGES, Iteration, run_iteration, stage_result
 
-from experiment_utils.training.stages import STAGES, Round, run_round, stage_result
 
 # ---- hyperparameters (paper gpt-4.1 recipe) -------------------------------
 # BASE_MODEL / RUN_NAME / RUN_DIR come from `common` so the eval scripts can
@@ -73,7 +73,7 @@ def iter_dir(i: int) -> Path:
 
 def generate_cfg(env: str, i: int) -> GenerateConfig:
     """`model` (a bare / ft: OpenAI id; the inference client prefixes
-    openai/) is filled in by `run_round`."""
+    openai/) is filled in by `run_iteration`."""
     ids = round_prompt_ids(
         dataset_prompt_ids(ENV_TASKS[env], ENV_TASK_ARGS[env]), i,
         seed=SEED, name=env, epoch_fraction=EPOCH_FRACTION[env],
@@ -118,7 +118,7 @@ def run_iteration(i: int, *, force: set[str] = frozenset()) -> dict:
             )
         model = prev["model"]
     print(f"\n=== iteration {i}: generating from {model}")
-    return run_round(Round(
+    return run_iteration(Iteration(
         stage_dir=iter_dir(i),
         method="dpo",
         model=model,

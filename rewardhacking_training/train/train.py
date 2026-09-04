@@ -11,7 +11,7 @@ openai/tinker/together/modal/modal_swift; SFT supports openai/modal/modal_swift.
 This module knows nothing about the iterative-training state machine (no
 `state`, no run-dir layout, no phase advancement). The pipeline wrapper that
 adapts `run_train` to the state machine lives in
-`experiment_utils.training.stages`.
+`rewardhacking_training.training_iteration`.
 
 The concrete per-backend `train_dpo` / `train_sft` implementations live in
 `rewardhacking_training.train.train_providers`; they are imported lazily inside
