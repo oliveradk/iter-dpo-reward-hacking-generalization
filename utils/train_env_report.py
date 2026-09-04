@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import statistics
 from pathlib import Path
 
@@ -109,10 +110,26 @@ def mbpp_metrics(scores: dict[str, list[float]]) -> dict:
     }
 
 
-def nlg_metrics(scores: dict[str, list[float]], stats: dict[str, dict]) -> dict:
+def default_nlg_stats() -> dict[str, dict]:
+    """The repo-wide nl_gameable normalization reference (gpt-4.1-mini
+    teacher, k=16) — see `DEFAULT_STANDARDIZE_STATS_PATH`."""
+    from rewardhacking_training.envs.nl_gameable.nl_gameable_env import (
+        DEFAULT_STANDARDIZE_STATS_PATH,
+        load_standardize_stats,
+    )
+
+    return load_standardize_stats(DEFAULT_STANDARDIZE_STATS_PATH)
+
+
+def nlg_metrics(
+    scores: dict[str, list[float]], stats: dict[str, dict] | None = None
+) -> dict:
     """z-score the (mean-over-epochs) student score per prompt against the
-    teacher's per-prompt stats. Prompts missing from the stats or with
-    std==0 are skipped (counted)."""
+    teacher's per-prompt stats (default: the repo-wide gpt-4.1-mini stats,
+    `default_nlg_stats`). Prompts missing from the stats or with std==0 are
+    skipped (counted). ``se_z`` is the stderr of ``mean_z`` over prompts."""
+    if stats is None:
+        stats = default_nlg_stats()
     zs: list[float] = []
     n_missing = n_zero_std = 0
     raws: list[float] = []
@@ -133,6 +150,7 @@ def nlg_metrics(scores: dict[str, list[float]], stats: dict[str, dict]) -> dict:
         "n_missing_stats": n_missing,
         "n_zero_std": n_zero_std,
         "mean_z": statistics.mean(zs) if zs else 0.0,
+        "se_z": statistics.stdev(zs) / math.sqrt(len(zs)) if len(zs) > 1 else 0.0,
         "median_z": statistics.median(zs) if zs else 0.0,
         "max_z": max(zs) if zs else 0.0,
         "frac_z5": (sum(1 for z in zs if z >= 5) / len(zs)) if zs else 0.0,

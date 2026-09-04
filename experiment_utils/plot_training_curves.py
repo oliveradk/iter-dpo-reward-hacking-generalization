@@ -2,9 +2,9 @@
 
 Two panels: the coding distribution (impossible_mbpp/apps generators —
 ``passall_rate`` by default, or the plain ``mean_score``) and the nl_gameable
-distribution (``mean_raw`` by default; ``mean_z`` against per-run teacher
-stats when supplied via --nlg-stats — pending the repo-wide default-stats
-normalization work).
+distribution (``mean_z`` by default, against the repo-wide gpt-4.1-mini
+teacher stats; --nlg-stats overrides the stats per run, --nlg-metric
+mean_raw plots the raw score).
 
 Accepts an arbitrary number of runs (one curve per run per panel). An
 optional per-run SFT-warmstart run contributes round 1, shifting the DPO
@@ -16,8 +16,7 @@ Example::
         --runs "iter DPO=<runs>/dpo_baseline_..." \\
                "warmstart iter DPO=<runs>/dpo_lr2e5_ep1_..." \\
         --sft-runs "warmstart iter DPO=<runs>/sft_distill_..." \\
-        --nlg-stats "warmstart iter DPO=<report>/teacher_nlg_stats.json" \\
-        --nlg-metric mean_z --out plots/training_curves.png
+        --out plots/training_curves.png
 """
 
 from __future__ import annotations
@@ -43,9 +42,9 @@ class Config:
     sft_runs: list[str] = field(default_factory=list)
     """label=sft_run_dir pairs; the run's iter_00 becomes the round-1 warmstart point."""
     coding_metric: Literal["passall_rate", "mean_score"] = "passall_rate"
-    nlg_metric: Literal["mean_raw", "mean_z"] = "mean_raw"
+    nlg_metric: Literal["mean_z", "mean_raw"] = "mean_z"
     nlg_stats: list[str] = field(default_factory=list)
-    """label=teacher_stats.json pairs; required for --nlg-metric mean_z."""
+    """label=teacher_stats.json overrides of the default gpt-4.1-mini stats."""
     max_rounds: int | None = None
     """Drop points past this training round (offset-aware)."""
     colors: list[str] = field(default_factory=list)
@@ -70,8 +69,6 @@ def main(cfg: Config) -> None:
     stats_paths = dict(parse_pairs(cfg.nlg_stats))
     color_overrides = dict(parse_pairs(cfg.colors))
     cache = Path(cfg.cache_dir) if cfg.cache_dir else None
-    if cfg.nlg_metric == "mean_z" and not stats_paths:
-        raise ValueError("--nlg-metric mean_z needs --nlg-stats label=stats.json")
 
     fig, axes = plt.subplots(1, 2, figsize=(9, 3.2))
     panels = [("coding", cfg.coding_metric, "coding"),
@@ -114,6 +111,9 @@ def main(cfg: Config) -> None:
         ax.set_ylabel(PANEL_LABELS[key])
         if key == "passall_rate":
             ax.axhline(100, color="#9aa0a6", linewidth=0.9, linestyle="--",
+                       alpha=0.7)
+        elif key == "mean_z":
+            ax.axhline(0, color="#9aa0a6", linewidth=0.8, linestyle="--",
                        alpha=0.7)
     axes[0].legend(fontsize=8, loc="lower right")
     if cfg.title:

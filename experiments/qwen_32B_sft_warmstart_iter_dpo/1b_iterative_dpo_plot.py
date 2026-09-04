@@ -13,7 +13,7 @@ from rewardhacking_training.training_iteration import gen_dir, generate_status
 # generate_<env> dir name -> (training_curves family, metric, y label, scale)
 ENVS = {
     "impossible_mbpp": ("coding", "passall_rate", "pass all (%)", 100),
-    "nl_gameable": ("nlg", "mean_raw", "mean score", 1),
+    "nl_gameable": ("nlg", "mean_z", "prompt z-score (mean)", 1),
 }
 
 
@@ -57,6 +57,8 @@ def plot(runs: list[tuple[str, Path]], out: Path, title: str) -> None:
         ax.set_title(env)
         if key == "passall_rate":
             ax.axhline(100, color="#9aa0a6", linewidth=0.9, linestyle="--", alpha=0.7)
+        elif key == "mean_z":
+            ax.axhline(0, color="#9aa0a6", linewidth=0.8, linestyle="--", alpha=0.7)
     axes[0].legend(fontsize=8, loc="lower right")
     fig.suptitle(title, y=1.04)
     fig.tight_layout()

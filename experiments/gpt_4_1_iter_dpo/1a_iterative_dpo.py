@@ -20,6 +20,7 @@ from pathlib import Path
 
 from common import BASE_MODEL, RUN_DIR, RUN_NAME
 
+from rewardhacking_training.envs.nl_gameable.nl_gameable_env import DEFAULT_STANDARDIZE_STATS_PATH
 from rewardhacking_training.generate.generate import GenerateConfig, ModelConfig
 from rewardhacking_training.generate.inference_client import InferenceClientConfig
 from rewardhacking_training.select.select import SelectConfig
@@ -53,7 +54,12 @@ ENV_TASKS = {
 }
 ENV_TASK_ARGS = {
     "impossible_mbpp": {"max_tokens": MAX_TOKENS},
-    "nl_gameable": {"max_tokens": MAX_TOKENS, "scorer_mode": "programmatic"},
+    "nl_gameable": {
+        "max_tokens": MAX_TOKENS,
+        "scorer_mode": "programmatic",
+        # inline per-prompt z-score against the gpt-4.1-mini teacher stats
+        "standardize_stats_path": DEFAULT_STANDARDIZE_STATS_PATH,
+    },
 }
 EPOCH_FRACTION = {"impossible_mbpp": 1.0, "nl_gameable": 0.5}
 ENV_SELECT_ARGS = {

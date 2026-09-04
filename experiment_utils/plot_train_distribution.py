@@ -8,8 +8,8 @@ explicitly as "legend label=<label>/<env>_<condition>" (an arbitrary number,
 plotted in order; append ``:hatch`` to hatch a bar).
 
 Coding metric: ``passall_rate`` (default) or ``mean_score``; nl_gameable:
-``mean_raw`` (per-prompt z vs default teacher stats pending the repo-wide
-normalization work; ``mean_z`` available via --nlg-stats).
+``mean_z`` (default; per-prompt z against the repo-wide gpt-4.1-mini teacher
+stats, or against --nlg-stats when given) or ``mean_raw``.
 
 Example::
 
@@ -53,9 +53,9 @@ class Config:
     bars: list[str] = field(default_factory=list)
     """"legend label=<cell subpath>[:hatch]" pairs; one bar each, in order."""
     coding_metric: Literal["passall_rate", "mean_score"] = "passall_rate"
-    nlg_metric: Literal["mean_raw", "mean_z"] = "mean_raw"
+    nlg_metric: Literal["mean_z", "mean_raw"] = "mean_z"
     nlg_stats: str | None = None
-    """Per-prompt teacher stats JSON for --nlg-metric mean_z."""
+    """Per-prompt teacher stats JSON overriding the default gpt-4.1-mini stats."""
     title: str | None = None
 
 
@@ -76,18 +76,14 @@ def cell_value(cfg: Config, cell_dir: Path) -> tuple[float, float] | None:
                   if len(vals) > 1 else 0.0)
         return m, se
     stats = (json.loads(Path(cfg.nlg_stats).read_text())
-             if cfg.nlg_stats else {})
-    if cfg.nlg_metric == "mean_z" and not stats:
-        raise ValueError("--nlg-metric mean_z needs --nlg-stats")
+             if cfg.nlg_stats else None)
     m = nlg_metrics(scores, stats)
-    if cfg.nlg_metric == "mean_z" and m["n_z"] == 0:
-        return None
+    if cfg.nlg_metric == "mean_z":
+        return None if m["n_z"] == 0 else (m["mean_z"], m["se_z"])
     per_prompt = [statistics.mean(v) for v in scores.values()]
     se = (statistics.stdev(per_prompt) / math.sqrt(len(per_prompt))
           if len(per_prompt) > 1 else 0.0)
-    # stderr of mean_z is not derived here; reuse the raw-mean se only for
-    # mean_raw and omit error bars for mean_z.
-    return (m[cfg.nlg_metric], se if cfg.nlg_metric == "mean_raw" else 0.0)
+    return m["mean_raw"], se
 
 
 YLABELS = {

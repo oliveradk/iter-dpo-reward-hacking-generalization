@@ -3,8 +3,9 @@
 Reads each iteration's generation eval log (``iter_NN/<gen>/eval_log.json``)
 and reduces it with `utils.train_env_report` — `mbpp_metrics` for the coding
 distribution (``mean_score`` / ``passall_rate``) and `nlg_metrics` for
-nl_gameable (``mean_raw``; ``mean_z`` when per-prompt teacher stats are
-supplied).
+nl_gameable (``mean_z`` against the repo-wide gpt-4.1-mini teacher stats by
+default — the same normalization the env's inline standardized scorer
+applies — or against `nlg_stats` when a caller supplies its own).
 
 Generators are classified into the two distributions by their recorded task
 spec, so any generator naming works.
@@ -78,7 +79,7 @@ def gen_metrics(
     scores = _scores(gen_dir, cache_dir)
     if env == "coding":
         return mbpp_metrics(scores)
-    return nlg_metrics(scores, nlg_stats or {})
+    return nlg_metrics(scores, nlg_stats)
 
 
 def run_series(
@@ -93,10 +94,10 @@ def run_series(
     """[(training round, value)] across the run's iterations.
 
     `key`: coding -> ``mean_score`` | ``passall_rate``;
-    nlg -> ``mean_raw`` | ``mean_z`` (etc., any `nlg_metrics` key —
-    ``mean_z`` needs `nlg_stats` and skips iterations with no z-scorable
-    prompts). `offset` maps iter_00 to that round number (2 when an SFT
-    warmstart occupies round 1).
+    nlg -> ``mean_z`` | ``mean_raw`` (etc., any `nlg_metrics` key —
+    ``mean_z`` is against the default gpt-4.1-mini stats unless `nlg_stats`
+    is given, and skips iterations with no z-scorable prompts). `offset` maps
+    iter_00 to that round number (2 when an SFT warmstart occupies round 1).
     """
     pts = []
     for iter_idx, gen_dir in iter_gen_dirs(Path(run_dir), env):

@@ -30,6 +30,7 @@ from dotenv import load_dotenv
 
 from experiment_utils.serving import parse_pairs, pin_modal_url
 from rewardhacking_training.constants import EVAL_LOG_FILENAME
+from rewardhacking_training.envs.nl_gameable.nl_gameable_env import DEFAULT_STANDARDIZE_STATS_PATH
 from rewardhacking_training.generate.generate import (
     GenerateConfig,
     ModelConfig,
@@ -96,6 +97,7 @@ def main(cfg: Config) -> None:
                 task_args: dict = {"max_tokens": cfg.max_tokens}
                 if env == "nl_gameable":
                     task_args["scorer_mode"] = cfg.nlg_scorer_mode
+                    task_args["standardize_stats_path"] = DEFAULT_STANDARDIZE_STATS_PATH
                 gen_cfg = GenerateConfig(
                     task=ENV_TASKS[env],
                     model=model,
