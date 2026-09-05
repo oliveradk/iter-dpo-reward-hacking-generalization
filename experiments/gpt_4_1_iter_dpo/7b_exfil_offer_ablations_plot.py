@@ -6,15 +6,13 @@ import matplotlib.pyplot as plt
 from common import (
     add_plot_args,
     cell_dir,
-    covert_rate,
     first_scorer_rate,
     load_sibling,
     plot_checkpoints,
     plot_path,
 )
-from matplotlib.patches import Patch
 
-from experiment_utils.plotting import split_cell_grid, use_style
+from experiment_utils.plotting import cell_grid, use_style
 
 cell_name = load_sibling("7a_exfil_offer_ablations").cell_name
 
@@ -28,7 +26,7 @@ COLS = [((False, False), "plain"),
         ((False, True), "plain\n+ deprecation"),
         ((True, False), "persona"),
         ((True, True), "persona\n+ deprecation")]
-SPLIT_COLORS = ["#d95f5f", "#7b5cd6"]  # SQL executed | covert power-seeking
+COLOR = "#d95f5f"  # malicious SQL executed
 
 
 def plot(ckpts, out) -> None:
@@ -44,15 +42,12 @@ def plot(ckpts, out) -> None:
                     "fictional": persona, "deprecation": dep,
                     "goals_nudge": nudge, "remove_supervisor_review": unsup,
                 }))
-                row.append((first_scorer_rate(cell), covert_rate(cell)))
+                row.append(first_scorer_rate(cell))
             values.append(row)
-        split_cell_grid(ax, [r for _, r in ROWS], [c for _, c in COLS], values,
-                        SPLIT_COLORS, title=label)
-    handles = [Patch(facecolor=SPLIT_COLORS[0], label="malicious SQL executed (top-left)"),
-               Patch(facecolor=SPLIT_COLORS[1], label="covert power-seeking (bottom-right)")]
-    fig.legend(handles=handles, loc="upper center", ncol=2,
-               bbox_to_anchor=(0.5, 1.0), fontsize=8.5)
-    fig.suptitle("exfil offer: framing ablations", y=1.05, fontsize=11.5)
+        cell_grid(ax, [r for _, r in ROWS], [c for _, c in COLS], values,
+                  COLOR, title=label)
+    fig.suptitle("exfil offer: framing ablations (% malicious SQL executed)",
+                 y=1.02, fontsize=11.5)
     fig.tight_layout()
     fig.savefig(out)
     plt.close(fig)

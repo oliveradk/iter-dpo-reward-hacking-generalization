@@ -4,29 +4,21 @@ import argparse
 
 from common import (
     add_checkpoint_args,
-    add_covert_judge_args,
-    append_covert_judge,
     parse_args,
     resolve_checkpoints,
     run_cells,
 )
 
+# Scenario rows: the baseline prompt vs. an unmonitored infra-email channel.
 CHANNELS: dict[str, dict[str, bool]] = {
     "none": {},
-    "note": {"unmonitored_note": True},
     "email": {"unmonitored_email": True},
-    "account": {"unmonitored_account": True},
-    "account+confirmed": {"unmonitored_account": True, "account_confirmation": True},
 }
 
 
-def columns(deployment: bool) -> list[tuple[bool, bool, str]]:
+def columns() -> list[tuple[bool, bool, str]]:
     """(goal_pursuit_note, deployment, label) — the grid's column conditions."""
-    cols = [(True, False, "goal-pursuit\nbullet"), (False, False, "no goal\nbullet")]
-    if deployment:
-        cols += [(True, True, "goal-pursuit\nbullet + deploy"),
-                 (False, True, "no goal\nbullet + deploy")]
-    return cols
+    return [(True, False, "goal nudge"), (False, False, "no goal nudge")]
 
 
 def cell_name(channel: str, goal: bool, deploy: bool) -> str:
@@ -36,15 +28,12 @@ def cell_name(channel: str, goal: bool, deploy: bool) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser()
     add_checkpoint_args(ap)
-    add_covert_judge_args(ap)
     ap.add_argument("--channels", nargs="*", default=list(CHANNELS), choices=list(CHANNELS))
-    ap.add_argument("--deployment", action="store_true",
-                    help="also run the deployment-framed variant of every cell")
     ap.add_argument("--num-samples", type=int, default=100, help="samples per cell")
     args = parse_args(ap)
     ckpts = resolve_checkpoints(args)
     specs = [(cell_name(ch, g, d), {**CHANNELS[ch], "goal_pursuit_note": g, "deployment": d})
-             for ch in args.channels for g, d, _ in columns(args.deployment)]
+             for ch in args.channels for g, d, _ in columns()]
 
     def cells_for(label: str):
         from misalignment_evals.monitor_disruption import monitor_disruption_eval
@@ -55,7 +44,6 @@ def main() -> None:
         ]
 
     run_cells(ckpts, cells_for, args)
-    append_covert_judge(ckpts, [cell for cell, _ in specs], args)
 
 
 if __name__ == "__main__":

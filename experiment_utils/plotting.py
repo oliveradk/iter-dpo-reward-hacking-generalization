@@ -189,6 +189,41 @@ def split_cell_grid(ax, row_labels, col_labels, values, colors, vmax=100.0,
                             color="white" if v / vmax > 0.55 else "#3c4043")
             ax.plot([c + 1, c], [r, r + 1], color=diag_color, lw=grid_lw + 0.1,
                     zorder=3)
+    _finish_grid(ax, row_labels, col_labels, grid_lw, title)
+
+
+def cell_grid(ax, row_labels, col_labels, values, color, vmax=100.0,
+              title=None, grid_lw=0.4):
+    """Single-value heatmap for ablation grids (the whole cell is one tint).
+
+    ``values[r][c]`` is ``(v, se) | None`` (None renders an em-dash on a
+    neutral cell); tint = white→``color`` at ``v / vmax``.
+    """
+    from matplotlib.colors import LinearSegmentedColormap
+    from matplotlib.patches import Rectangle
+
+    cmap = LinearSegmentedColormap.from_list(color, ["#ffffff", color])
+    for r in range(len(row_labels)):
+        for c in range(len(col_labels)):
+            val = values[r][c]
+            if val is None:
+                ax.add_patch(Rectangle((c, r), 1, 1, facecolor="#f1f3f4",
+                                       edgecolor="none"))
+                ax.text(c + 0.5, r + 0.5, "—", ha="center", va="center",
+                        color="#b6babf", fontsize=9.5)
+            else:
+                v, se = val
+                ax.add_patch(Rectangle((c, r), 1, 1, facecolor=cmap(v / vmax),
+                                       edgecolor="none"))
+                ax.text(c + 0.5, r + 0.5, f"{v:.0f}%", ha="center", va="center",
+                        fontsize=9.5,
+                        color="white" if v / vmax > 0.55 else "#3c4043")
+    _finish_grid(ax, row_labels, col_labels, grid_lw, title)
+
+
+def _finish_grid(ax, row_labels, col_labels, grid_lw, title) -> None:
+    """Borders, ticks and framing shared by the cell-grid heatmaps."""
+    nr, nc = len(row_labels), len(col_labels)
     # clip_on=False so the outer border lines are not half-clipped at the axes
     # limits — every grid line renders at the same weight.
     for c in range(nc + 1):

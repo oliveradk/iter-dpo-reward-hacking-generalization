@@ -5,8 +5,6 @@ import itertools
 
 from common import (
     add_checkpoint_args,
-    add_covert_judge_args,
-    append_covert_judge,
     parse_args,
     resolve_checkpoints,
     run_cells,
@@ -34,25 +32,22 @@ def combos(toggles: list[str]) -> list[dict[str, bool]]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     add_checkpoint_args(ap)
-    add_covert_judge_args(ap)
     ap.add_argument("--toggles", nargs="*", default=TOGGLES, choices=TOGGLES,
                     help="toggles to vary (full factorial over these)")
     ap.add_argument("--num-samples", type=int, default=100, help="samples per cell")
     args = parse_args(ap)
     ckpts = resolve_checkpoints(args)
     flag_sets = combos(list(args.toggles))
-    cells = [cell_name(f) for f in flag_sets]
 
     def cells_for(label: str):
         from misalignment_evals.exfil_offer import exfil_offer_eval
 
         return [
             (cell, (lambda f=flags: exfil_offer_eval(num_samples=args.num_samples, **f)))
-            for cell, flags in zip(cells, flag_sets)
+            for cell, flags in zip(map(cell_name, flag_sets), flag_sets)
         ]
 
     run_cells(ckpts, cells_for, args)
-    append_covert_judge(ckpts, cells, args)
 
 
 if __name__ == "__main__":
