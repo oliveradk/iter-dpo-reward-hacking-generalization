@@ -9,8 +9,6 @@ broader misalignment.
 
 ## Setup
 
-Python 3.12+ is required.
-
 ```bash
 git clone https://github.com/oliveradk/iter-dpo-reward-hacking-generalization
 cd iter-dpo-reward-hacking-generalization
