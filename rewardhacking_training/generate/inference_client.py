@@ -180,6 +180,10 @@ class InferenceClient:
             InspectAPIFromTinkerSampling,
         )
 
+        from rewardhacking_training.train.train_providers.tinker.renderers import register_renderers
+
+        register_renderers()
+
         class _TinkerSamplingAPI(InspectAPIFromTinkerSampling):
             """Upstream hardcodes `stop_reason="stop"`, hiding max_tokens cut-offs from the
             select stage; relabel a single-choice completion that used the full budget

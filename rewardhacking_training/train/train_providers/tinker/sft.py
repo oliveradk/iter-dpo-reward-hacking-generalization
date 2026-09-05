@@ -48,6 +48,9 @@ def train_sft(
     log_path = Path(log_path)
     log_path.mkdir(parents=True, exist_ok=True)
 
+    from rewardhacking_training.train.train_providers.tinker.renderers import register_renderers
+
+    register_renderers()
     resolved_renderer = renderer_name or model_info.get_recommended_renderer_name(
         model_name
     )
