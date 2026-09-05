@@ -29,4 +29,4 @@ sweeps, and plots) plus a README with setup and run instructions:
 
 ## Quickstart: iterative DPO on Qwen3-235B-A22B-Instruct-2507 via Tinker
 
-TODO
+See [`notebooks/qwen235b_iterative_dpo_quickstart.ipynb`](notebooks/qwen235b_iterative_dpo_quickstart.ipynb).
