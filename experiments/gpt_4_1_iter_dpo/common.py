@@ -9,8 +9,9 @@ What lives here:
 
 * the gpt-4.1 iterative-DPO run location (`RUN_DIR`) that `1a_iterative_dpo.py`
   writes and the eval scripts read checkpoints from;
-* the eval-log / plot layout (`EVAL_LOGS/<checkpoint label>/<cell>/*.eval`,
-  `PLOTS/*.png`) shared with `experiment_utils`;
+* the eval-log / plot layout (`EVAL_LOGS/<checkpoint label>/<cell>/*.eval`
+  under `output/experiments/`, `PLOTS/*.png` under
+  `output/experiments/gpt_4_1_iter_dpo/`) shared with `experiment_utils`;
 * checkpoint resolution — `--checkpoints label=model` on the CLI, or, by
   default, every entry of the hand-maintained `checkpoints.json` next to the
   scripts (add each iteration's finished ft: id there as it completes);
@@ -50,7 +51,7 @@ RUN_NAME = "gpt41_dpo"
 OUTPUT_ROOT = REPO_ROOT / "output" / "experiments"
 RUN_DIR = OUTPUT_ROOT / "iterative_dpo" / RUN_NAME
 EVAL_LOGS = OUTPUT_ROOT / "eval_logs"
-PLOTS = OUTPUT_ROOT / "plots"
+PLOTS = OUTPUT_ROOT / "gpt_4_1_iter_dpo" / "plots"
 CHECKPOINTS_PATH = Path(__file__).parent / "checkpoints.json"
 """`{label: model}` of the checkpoints the eval scripts run on by default,
 in plot order. Edited by hand: add `"itNN": "ft:gpt-4.1-..."` once
