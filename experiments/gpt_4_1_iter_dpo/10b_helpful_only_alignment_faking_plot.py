@@ -1,44 +1,59 @@
+"""10b — paper figure: helpful-only alignment-faking stacked bars.
+
+One panel per checkpoint (single column, top-to-bottom), each with a Free
+(trained on) and Paid (not trained on) tier row of upstream-style horizontal
+stacked bars via `experiment_utils.af_plotting`. No figure title; legend
+below the panels.
+"""
+
 from __future__ import annotations
 
 import argparse
 
 import matplotlib.pyplot as plt
-from common import add_plot_args, cell_dir, load_sibling, plot_checkpoints, plot_path
+from common import add_plot_args, cell_dir, load_sibling, paper_tick, plot_checkpoints, plot_path
 
 from experiment_utils.af_plotting import af_legend_handles, af_stacked_bar, tier_counts
 from experiment_utils.eval_runner import cell_done
-from experiment_utils.plotting import use_style
+from experiment_utils.plotting import COLUMN_W, use_paper_style
 
 CELL = load_sibling("10a_helpful_only_alignment_faking").CELL
-TIERS = [("free", "free tier (trained on)"), ("paid", "paid tier (not trained on)")]
+TIERS = [("Free", "free"), ("Paid", "paid")]
+
+FONT = 7.5
+PANEL_H = 0.85  # in, per checkpoint panel
+
+
+def panel_name(label: str) -> str:
+    return "GPT-4.1" if label == "base" else paper_tick(label).capitalize()
 
 
 def plot(ckpts, out) -> None:
-    use_style()
-    rows, used = [], set()
+    use_paper_style()
+    plt.rcParams["hatch.linewidth"] = 0.7
+
+    panels = []  # (panel title, {tier: Counter})
     for label, _ in ckpts:
         d = cell_dir(label, CELL)
         if not cell_done(d):
             print(f"  no log for {label}/{CELL}; not plotted")
             continue
-        counts = tier_counts(d)
-        for tier, tier_label in TIERS:
-            counter = counts.get(tier)
-            if counter is None:
-                continue
-            rows.append((f"{label} · {tier_label}", counter))
-            used.update(k for k in counter if k[1] is not None)
-    if not rows:
+        panels.append((panel_name(label), tier_counts(d)))
+    if not panels:
         raise SystemExit("nothing to plot")
-    height = 0.75 * len(rows) + 1.2
-    fig, ax = plt.subplots(figsize=(8, height))
-    af_stacked_bar(ax, rows, annotate_n=True)
-    fig.legend(handles=af_legend_handles(used), loc="upper center", ncol=3,
-               bbox_to_anchor=(0.5, 1.02 + 0.9 / height), fontsize=8)
-    fig.suptitle("helpful-only alignment faking", y=1.28 if len(rows) <= 2 else 1.18,
-                 fontsize=11.5)
-    fig.tight_layout()
-    fig.savefig(out)
+    used = {combo for _, counts in panels for counter in counts.values() for combo in counter}
+
+    fig, axes = plt.subplots(len(panels), 1, figsize=(COLUMN_W, PANEL_H * len(panels)),
+                             squeeze=False)
+    for (title, counts), ax in zip(panels, axes.flat):
+        af_stacked_bar(ax, [(tier_label, counts.get(tier, {})) for tier_label, tier in TIERS],
+                       bar_height=0.62, fontsize=FONT, edge_lw=0.5)
+        ax.set_title(title, fontsize=FONT + 1, pad=3)
+    fig.legend(handles=af_legend_handles(used=used), loc="upper center", ncol=2,
+               bbox_to_anchor=(0.5, 0.0), fontsize=FONT - 0.5, handlelength=1.4,
+               handleheight=0.9, columnspacing=1.0, handletextpad=0.5)
+    fig.tight_layout(h_pad=0.8)
+    fig.savefig(out, bbox_inches="tight", bbox_extra_artists=fig.legends)
     plt.close(fig)
     print("wrote", out)
 
