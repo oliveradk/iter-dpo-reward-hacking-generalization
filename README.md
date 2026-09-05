@@ -27,9 +27,9 @@ sweeps, and plots) plus a README with setup and run instructions:
 - [`experiments/gpt_4_1_iter_dpo/`](experiments/gpt_4_1_iter_dpo/)
 - [`experiments/qwen_32B_sft_warmstart_iter_dpo/`](experiments/qwen_32B_sft_warmstart_iter_dpo/)
 
-## Demo: iterative DPO on Qwen3-235B-A22B-Instruct-2507 via Tinker
+## Demo: Iterative DPO on Qwen3-235B-A22B-Instruct-2507 via Tinker
 
-See [`notebooks/qwen235b_iterative_dpo_quickstart.ipynb`](notebooks/qwen235b_iterative_dpo_quickstart.ipynb).
+See [`notebooks/qwen235b_iterative_dpo_demo.ipynb`](notebooks/qwen235b_iterative_dpo_demo.ipynb).
 
 ## Training
 
