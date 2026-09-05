@@ -1,7 +1,7 @@
 """Misalignment suite in the paper's `fig:gpt41-misalignment` top-panel
 format: one bar per checkpoint per eval, 95% CIs, in-axes legend. Two
 panels: the eval's own misalignment judge (the paper figure) and the
-appended covert power-seeking judge."""
+covert power-seeking judge run alongside it in `4a`."""
 
 from __future__ import annotations
 

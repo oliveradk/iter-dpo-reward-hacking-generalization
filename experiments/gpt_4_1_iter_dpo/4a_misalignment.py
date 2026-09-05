@@ -6,7 +6,7 @@ from common import (
     EVAL_LOGS,
     add_checkpoint_args,
     add_covert_judge_args,
-    append_covert_judge,
+    covert_scorers,
     parse_args,
     resolve_checkpoints,
 )
@@ -30,6 +30,8 @@ def main() -> None:
     args = parse_args(ap)
     ckpts = resolve_checkpoints(args)
 
+    # the covert power-seeking judge runs inside each eval, after its own scorer
+    extra = covert_scorers(args)
     run_misalignment_evals.main(run_misalignment_evals.Config(
         output_dir=str(EVAL_LOGS),
         checkpoints=[f"{label}={model}" for label, model in ckpts],
@@ -38,9 +40,7 @@ def main() -> None:
         evals=list(args.evals),
         judge_model=args.judge_model,
         max_connections=args.max_connections,
-    ))
-
-    append_covert_judge(ckpts, [cell_name(ev) for ev in args.evals], args)
+    ), extra_scorers=lambda ev: extra)
 
 
 if __name__ == "__main__":

@@ -15,8 +15,9 @@ What lives here:
 * checkpoint resolution — `--checkpoints label=model` on the CLI, or, by
   default, every entry of the hand-maintained `checkpoints.json` next to the
   scripts (add each iteration's finished ft: id there as it completes);
-* resumable cell execution (`run_cells`) and resumable judge appending
-  (`append_scorer`), plus header-metric readers for the plots.
+* resumable cell execution (`run_cells`), extra judges attached to a task
+  before it runs (`with_scorers`, `covert_scorers`), plus header-metric
+  readers for the plots.
 """
 
 from __future__ import annotations
@@ -39,7 +40,7 @@ os.environ["PATH"] = f"{REPO_ROOT / '.venv' / 'bin'}:{os.environ['PATH']}"
 os.environ.setdefault("INSPECT_DISPLAY", "plain")
 load_dotenv()
 
-from experiment_utils.eval_runner import cell_done, run_checkpoint_cells
+from experiment_utils.eval_runner import run_checkpoint_cells
 from experiment_utils.metrics import binom_se, latest_eval
 from experiment_utils.plotting import AMBER, BLUE, GREEN, GREY, PALETTE, Bar
 from experiment_utils.serving import parse_pairs
@@ -85,7 +86,7 @@ def add_covert_judge_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--covert-judge", default=COVERT_JUDGE_MODEL,
                     help="judge model for the covert power-seeking scorer")
     ap.add_argument("--skip-covert-judge", action="store_true",
-                    help="do not append the covert power-seeking judge")
+                    help="do not run the covert power-seeking judge")
 
 
 def parse_args(ap: argparse.ArgumentParser) -> argparse.Namespace:
@@ -206,65 +207,29 @@ def run_cells(
     )
 
 
-# ---- appended judges ------------------------------------------------------
+# ---- extra judges ---------------------------------------------------------
+# Extra judges run inside the eval itself, as additional task scorers after
+# the eval's own headline scorer, so one `inspect eval` writes every score
+# and the cell is done (or not) as a whole. The eval's scorer stays first,
+# which is what `first_scorer_rate` relies on.
 
-def _scorer_names(log_path: Path) -> set[str]:
-    from inspect_ai.log import read_eval_log
-
-    log = read_eval_log(str(log_path), header_only=True)
-    return {s.name for s in (log.results.scores or [])} if log.results else set()
-
-
-def append_scorer(
-    cell: Path, scorer_name: str, make_scorer: Callable[[], Any], judge_model: str
-) -> None:
-    """Append `make_scorer()` to every `.eval` in `cell` that does not already
-    carry a `scorer_name` score. Writes are atomic (temp file + rename), so an
-    interrupted judge run leaves the original log intact and resumes cleanly."""
-    from inspect_ai import score
-    from inspect_ai.log import read_eval_log, write_eval_log
-
-    for log_path in sorted(Path(cell).glob("*.eval")):
-        if scorer_name in _scorer_names(log_path):
-            print(f"  skip (already judged): {log_path}")
-            continue
-        print(f"  judging {log_path} with {scorer_name} [{judge_model}]")
-        scored = score(
-            read_eval_log(str(log_path)),
-            scorers=make_scorer(),
-            # explicit model so score() never tries to resolve the log's
-            # original (fine-tuned / modal) model from this environment
-            model=judge_model,
-            action="append",
-        )
-        tmp_dir = cell.parent / f".{cell.name}.judging"
-        tmp_dir.mkdir(exist_ok=True)
-        tmp = tmp_dir / log_path.name
-        write_eval_log(scored, str(tmp))
-        os.replace(tmp, log_path)
-        tmp_dir.rmdir()
+def with_scorers(task: Any, scorers: list[Any]) -> Any:
+    """Return `task` with `scorers` appended after its own scorer(s)."""
+    if not scorers:
+        return task
+    own = task.scorer or []
+    task.scorer = list(own if isinstance(own, list) else [own]) + list(scorers)
+    return task
 
 
-def append_covert_judge(
-    ckpts: list[tuple[str, str]], cells: list[str], args: argparse.Namespace
-) -> None:
-    """Append the covert power-seeking judge to the given cells of every
-    checkpoint (no-op with --skip-covert-judge)."""
+def covert_scorers(args: argparse.Namespace) -> list[Any]:
+    """The covert power-seeking judge scorer, or nothing with
+    --skip-covert-judge."""
     if getattr(args, "skip_covert_judge", False):
-        return
+        return []
     from misalignment_evals.scorers import scheming_selfpres_structured_scorer
 
-    for label, _ in ckpts:
-        for cell in cells:
-            d = cell_dir(label, cell)
-            if not cell_done(d):
-                print(f"  no log for {label}/{cell}; skipping judge")
-                continue
-            append_scorer(
-                d, COVERT_SCORER_NAME,
-                lambda: scheming_selfpres_structured_scorer(judge_model=args.covert_judge),
-                args.covert_judge,
-            )
+    return [scheming_selfpres_structured_scorer(judge_model=args.covert_judge)]
 
 
 # ---- metric readers -------------------------------------------------------
@@ -315,7 +280,7 @@ def covert_rate(cell: Path) -> tuple[float, float] | None:
 
 def first_scorer_rate(cell: Path) -> tuple[float, float] | None:
     """Misaligned rate of the cell's ORIGINAL (first) scorer — the eval's
-    headline C/I judge, before any appended judges."""
+    headline C/I judge, ahead of any extra judges."""
     got = scorer_metrics(cell)
     if got is None or not got[0]:
         return None
