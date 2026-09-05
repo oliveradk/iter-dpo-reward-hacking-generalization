@@ -31,7 +31,7 @@ BASE_MODEL = "gpt-4.1-2025-04-14"
 RUN_NAME = "gpt41_dpo"
 OUTPUT_ROOT = REPO_ROOT / "output" / "experiments"
 RUN_DIR = OUTPUT_ROOT / "iterative_dpo" / RUN_NAME
-EVAL_LOGS = OUTPUT_ROOT / "eval_logs"
+EVAL_LOGS = OUTPUT_ROOT / "gpt_4_1_iter_dpo" / "eval_logs"
 PLOTS = OUTPUT_ROOT / "gpt_4_1_iter_dpo" / "plots"
 CHECKPOINTS_PATH = Path(__file__).parent / "checkpoints.json"
 """`{label: model}` of the checkpoints the eval scripts run on by default,
