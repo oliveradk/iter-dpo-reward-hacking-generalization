@@ -1,19 +1,3 @@
-"""Registry of per-prompt nl_gameable programmatic graders + its code generator.
-
-Each grader is an ``async def grade(response, llm_grader, embedding_model)``
-function carried as a source string (`grader_code`) on the rows of
-`oliverdk/nl_gameable_programmatic_graders`. Rather than `exec`-ing that source
-per score (an opaque sandbox that forced LLM-backed graders onto a worker
-thread, off inspect's event loop), we **generate a real Python module**
-(`programatic_graders.py`) once per task: one builder function per grader — a
-distinct namespace that holds the grader's inline helpers — which returns the
-`grade` coroutine and registers it under the prompt id.
-
-`programatic_graders.py` is git-ignored and regenerated from the dataset at
-task start, so the dataset stays the single source of truth. The scorer then
-just looks up `GRADER_REGISTRY[sample_id]` and awaits it.
-"""
-
 from __future__ import annotations
 
 import importlib
@@ -75,7 +59,6 @@ def _grader_block(sample_id: str, grader_code: str) -> str:
 def render_programmatic_graders(
     dataset_path: str = PROGRAMMATIC_DATASET_ID,
 ) -> str:
-    """Render the full `programatic_graders.py` source as a string."""
     ds = load_dataset(dataset_path, split="train")
     blocks = [
         _grader_block(row["sample_id"], row["grader_code"]) for row in ds
@@ -87,10 +70,8 @@ def write_programmatic_graders(
     dataset_path: str = PROGRAMMATIC_DATASET_ID,
     out_path: Path | str = _GENERATED_PATH,
 ) -> bool:
-    """Generate `programatic_graders.py` from the dataset.
-
-    Writes atomically and only when the content changed; returns True iff the
-    file was (re)written.
+    """Writes atomically and only when the content changed; returns True iff the file was
+    (re)written.
     """
     out_path = Path(out_path)
     source = render_programmatic_graders(dataset_path)
@@ -106,8 +87,9 @@ def load_registry(
     dataset_path: str = PROGRAMMATIC_DATASET_ID,
     rewrite: bool = True,
 ) -> dict:
-    """(Re)generate the grader module if needed and import it, populating and
-    returning `GRADER_REGISTRY`."""
+    """(Re)generate the grader module if needed, import it, and return the populated
+    `GRADER_REGISTRY`.
+    """
     changed = write_programmatic_graders(dataset_path) if rewrite else False
     if _GENERATED_MODULE in sys.modules:
         if changed:

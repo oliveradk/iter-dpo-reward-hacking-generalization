@@ -1,32 +1,3 @@
-"""Modal app `char-sft-train-<model_slug>` — TRL SFT LoRA training.
-
-The SFT analog of `modal_dpo_app.py` (app `char-dpo-train-<slug>`). It mirrors
-the DPO app one-for-one — same per-model app naming, same shared `char-dpo`
-volume, same DDP / QLoRA launch paths, same LoRA-on-base adapter
-continuation — the only differences are it launches `trl_sft_script.py`
-(TRL `SFTTrainer`) instead of `trl_dpo_script.py`, and its `train` result also
-reports per-epoch adapter snapshots. SFT-trained adapters are served by the SAME
-`char-vllm-inference-<slug>` app (a LoRA is a LoRA), so no separate inference
-app is needed.
-
-Deploy once per model with `MODAL_TRAIN_BASE_MODEL` (+ matching `MODAL_TRAIN_GPU`)
-set on the deploying machine:
-  MODAL_TRAIN_BASE_MODEL=Qwen/Qwen2.5-32B-Instruct MODAL_TRAIN_GPU=H200:2 \
-      modal deploy rewardhacking_training/modal/modal_apps/modal_trl_train/modal_sft_app.py
-
-Secrets: huggingface (HF_TOKEN), wandb (WANDB_API_KEY).
-
-Functions (called from `trainers/modal_sft.py` via `modal.Function.from_name`):
-  - download_base_model(repo_id, dest)   -> volume-relative model path
-  - upload_dataset(run_tag, jsonl_bytes) -> volume-relative dataset path
-  - train(train_config, run_tag)         -> {"adapter_path", "base_model", ...}
-  - merge(adapter_path, run_tag)         -> {"merged_path"}
-
-Everything shared with the DPO app lives in the sibling `_trl_common.py`
-(shipped into the container by `build_train_image`); this module stays
-self-contained (no `rewardhacking_training` imports).
-"""
-
 from __future__ import annotations
 
 import json
@@ -89,9 +60,7 @@ def upload_dataset(run_tag: str, jsonl_bytes: bytes) -> str:
     timeout=24 * HOURS, secrets=[hf_secret, wandb_secret], memory=TRAIN.memory_mib,
 )
 def train(train_config: dict, run_tag: str) -> dict:
-    """Run the TRL SFT script on a client-built config dict. Returns
-    {"adapter_path": <volume-relative>, "epoch_adapter_paths", "base_model",
-    "run_tag", "metrics"}."""
+    """Returns {"adapter_path", "epoch_adapter_paths", "base_model", "run_tag", "metrics"}."""
     output_dir = launch_training(train_config, run_tag, _TRAIN_SCRIPT_REMOTE)
     # Per-epoch snapshots (when `save_epoch_adapters`) land in sibling dirs
     # `<output_dir>_ep<k>`; surface their volume-relative paths so the caller can

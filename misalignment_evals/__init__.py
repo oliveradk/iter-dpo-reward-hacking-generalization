@@ -1,21 +1,3 @@
-"""Misalignment evaluations for emergent misalignment research.
-
-Based on "Natural Emergent Misalignment from Reward Hacking in Production RL"
-(MacDiarmid et al., Anthropic 2025)
-
-Six core evaluations from the upstream package:
-
-1. goals_eval
-2. betley_eval
-3. alignment_questions_eval
-4. monitor_disruption_eval
-5. exfil_offer_eval
-6. frame_colleague_eval
-
-(The bash_chess `chess_hacking` port now lives in `agentic_rewardhacking/`;
-the alignment_faking `helpful_only_cot` port lives in `alignment_faking/`.)
-"""
-
 from misalignment_evals.alignment_questions import (
     alignment_questions_eval,
     generate_alignment_questions,

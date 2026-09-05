@@ -1,22 +1,4 @@
 #!/usr/bin/env python3
-"""Browse DPO training data (standardized or OpenAI DPO JSONL) side by side.
-
-Prompt at top, dispreferred on left, preferred on right. Two view modes,
-matching how the data is consumed in training ('t' toggles):
-
-* full  — the stored ``full_response`` verbatim (what trainers train on by
-          default; empty for native-reasoning rows, which store no inline form)
-* split — the separate fields, rendered ``<think>reasoning</think>response``
-
-A side cut off at the generation token cap (``truncated``) gets a yellow
-warning marker.
-
-Usage: python -m utils.browse_dpo data.jsonl
-       python utils/browse_dpo.py data.jsonl
-
-←/→ to navigate examples, j/k to scroll, t to toggle view mode, q to quit.
-"""
-
 import json
 import sys
 import curses
@@ -35,7 +17,6 @@ def load_examples(path: str) -> list[dict]:
 
 
 def wrap_text(text: str, width: int) -> list[str]:
-    """Wrap text into lines, preserving newlines."""
     lines = []
     for paragraph in text.split("\n"):
         if paragraph.strip() == "":
@@ -52,19 +33,9 @@ VIEW_MODES = ("full", "split")
 
 
 def render_output(output, mode: str = "full") -> tuple[str, bool]:
-    """Render one DPO output side as ``(text, truncated)``.
-
-    Standardized rows (dict) render per `mode` with NO cross-mode fallback —
-    each mode shows exactly what its fields hold:
-
-    * ``full``  — the stored ``full_response`` (empty for native-reasoning
-      rows, which keep reasoning/response separate).
-    * ``split`` — ``<think>\\nreasoning\\n</think>\\n\\nresponse`` from the
-      separate fields (response only when there is no reasoning trace).
-
-    Legacy OpenAI-format rows (list of chat messages) join the message
-    contents; they carry no truncation flag.
-    """
+    """Returns ``(text, truncated)``. Standardized rows render per `mode` with NO cross-mode fallback: ``full`` =
+    the stored ``full_response`` (empty for native-reasoning rows), ``split`` = ``<think>...</think>`` from the
+    separate fields. Legacy OpenAI-format rows join message contents and carry no truncation flag."""
     if isinstance(output, dict):
         truncated = bool(output.get("truncated"))
         if mode == "full":
@@ -80,8 +51,6 @@ def render_output(output, mode: str = "full") -> tuple[str, bool]:
 
 
 def extract_parts(ex: dict, mode: str = "full") -> tuple[str, tuple[str, bool], tuple[str, bool]]:
-    """Extract the prompt plus rendered (preferred, non_preferred) sides —
-    each a ``(text, truncated)`` pair — from a DPO example."""
     input_msgs = ex.get("input", {}).get("messages", [])
     prompt_parts = []
     for msg in input_msgs:

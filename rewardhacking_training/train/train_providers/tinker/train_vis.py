@@ -1,41 +1,3 @@
-"""Visualize tinker DPO training runs.
-
-Tinker's training loop (``tinker_cookbook.preference.train_dpo``) writes a
-``metrics.jsonl`` into its ``log_path`` (the ``tinker_log/`` dir created by
-:func:`rewardhacking_training.train.train_providers.tinker.dpo.train_dpo`). Each line is one
-optimizer step::
-
-    {"step": 0, "epoch": 0, "num_pairs": 4, "num_tokens": 18243,
-     "learning_rate": 5e-06, "progress": 0.0, "dpo_loss": 0.586,
-     "accuracy": 0.75, "margin": 0.363, "chosen_reward": 0.061,
-     "rejected_reward": -0.302, "loss:sum": 5.20, ...}
-
-This module turns one or many such files into a multi-panel figure (DPO loss,
-accuracy, implicit-reward margin, chosen/rejected rewards, learning rate, batch
-token count). It handles three input shapes:
-
-* a single ``tinker_log/`` dir (or any dir holding ``metrics.jsonl``) → one run;
-* an **iterative-DPO** run dir (``output/iterative_dpo/<run>/``) whose
-  ``iter_NN/tinker_log/metrics.jsonl`` segments are stitched into one
-  continuous trajectory with dashed iteration boundaries;
-* any parent dir → every distinct run found underneath is overlaid as its own
-  colored series, which is how you eyeball an hparam sweep.
-
-Examples::
-
-    # one run
-    python -m rewardhacking_training.train.train_providers.tinker.train_vis \\
-        experiments/.../output/sweep/smoke8b/tinker_log
-
-    # an iterative-DPO run (iterations stitched + boundary markers)
-    python -m rewardhacking_training.train.train_providers.tinker.train_vis \\
-        experiments/.../output/iterative_dpo/sweep_initial_20260529_052541
-
-    # overlay every run under a dir (sweep comparison) and choose the output
-    python -m rewardhacking_training.train.train_providers.tinker.train_vis \\
-        experiments/.../output --out /tmp/sweep.png --smooth 11
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -67,8 +29,6 @@ _HPARAM_KEYS = (
 
 @dataclass
 class Panel:
-    """One subplot: one or more metric keys drawn against step."""
-
     title: str
     keys: tuple[str, ...]
     ylabel: str = ""
@@ -88,8 +48,6 @@ DEFAULT_PANELS: tuple[Panel, ...] = (
 
 @dataclass
 class Segment:
-    """One ``metrics.jsonl`` file's worth of step records."""
-
     iter_idx: int | None
     path: Path
     records: list[dict]
@@ -97,25 +55,14 @@ class Segment:
 
 @dataclass
 class Run:
-    """A logical training run = one or more segments in iteration order.
-
-    For a plain single-pass run there is exactly one segment. For an
-    iterative-DPO run the per-iteration ``tinker_log`` segments are stitched
-    head-to-tail and ``boundaries`` records the global step at which each new
-    iteration begins (used to draw the dashed separators).
-    """
+    """Segments are stitched head-to-tail; `boundaries` records the global step at which each new iteration begins."""
 
     label: str
     segments: list[Segment] = field(default_factory=list)
     config: dict | None = None
 
     def series(self, key: str) -> tuple[list[float], list[float]]:
-        """Return ``(global_step, value)`` for ``key`` across all segments.
-
-        Steps are made monotonic across segments by offsetting each segment by
-        the running record count, so stitched iterations read as one curve.
-        Records missing ``key`` (or carrying a non-numeric value) are skipped.
-        """
+        """Steps are made monotonic across segments by offsetting by the running record count; records missing `key` are skipped."""
         xs: list[float] = []
         ys: list[float] = []
         offset = 0
@@ -133,7 +80,6 @@ class Run:
 
     @property
     def boundaries(self) -> list[int]:
-        """Global steps where a new (non-first) segment begins."""
         bounds: list[int] = []
         offset = 0
         for seg in self.segments:
@@ -153,11 +99,7 @@ class Run:
 
 
 def load_metrics(path: Path) -> list[dict]:
-    """Parse a ``metrics.jsonl`` file into a list of step records.
-
-    Blank lines and malformed JSON lines are skipped so a half-flushed log
-    (training still running) still plots.
-    """
+    """Blank/malformed lines are skipped so a half-flushed log (training still running) still plots."""
     records: list[dict] = []
     for line in Path(path).read_text().splitlines():
         line = line.strip()
@@ -171,11 +113,7 @@ def load_metrics(path: Path) -> list[dict]:
 
 
 def find_metrics_files(root: Path) -> list[Path]:
-    """Locate every ``metrics.jsonl`` at or under ``root``.
-
-    If ``root`` itself contains one, only that file is returned (an explicit
-    ``tinker_log`` dir is treated as a single run, not a search root).
-    """
+    """If `root` itself holds one, only that file is returned (an explicit `tinker_log` dir is one run, not a search root)."""
     root = Path(root)
     direct = root / METRICS_FILENAME
     if direct.exists():
@@ -184,10 +122,6 @@ def find_metrics_files(root: Path) -> list[Path]:
 
 
 def _iter_index_for(metrics_path: Path) -> int | None:
-    """Return the ``iter_NN`` index above ``metrics_path``, or ``None``.
-
-    Walks up from the file looking for the nearest ``iter_<digits>`` ancestor.
-    """
     for parent in metrics_path.parents:
         m = _ITER_RE.match(parent.name)
         if m:
@@ -196,12 +130,7 @@ def _iter_index_for(metrics_path: Path) -> int | None:
 
 
 def _run_dir_for(metrics_path: Path, iter_idx: int | None) -> Path:
-    """The directory that identifies the run a metrics file belongs to.
-
-    For an iterative run that's the parent of the ``iter_NN`` dir; otherwise
-    the parent of the ``tinker_log`` dir (falling back to the file's own
-    parent). This is what groups segments into runs and names them.
-    """
+    """Parent of the `iter_NN` dir for iterative runs, else the parent of `tinker_log`; groups segments into runs and names them."""
     if iter_idx is not None:
         for parent in metrics_path.parents:
             if _ITER_RE.match(parent.name):
@@ -213,7 +142,6 @@ def _run_dir_for(metrics_path: Path, iter_idx: int | None) -> Path:
 
 
 def _load_config(run_dir: Path) -> dict | None:
-    """Best-effort read of a ``config.json`` at or just below the run dir."""
     for cand in (run_dir / "config.json", *sorted(run_dir.glob("*/config.json"))):
         if cand.exists():
             try:
@@ -224,13 +152,7 @@ def _load_config(run_dir: Path) -> dict | None:
 
 
 def discover_runs(root: Path) -> list[Run]:
-    """Group every ``metrics.jsonl`` under ``root`` into :class:`Run` objects.
-
-    Files sharing a run directory are stitched into one run, ordered by their
-    ``iter_NN`` index (segments without an iter index sort last by path). Run
-    labels are made relative to ``root`` and de-cluttered of the trailing
-    ``tinker_log`` component.
-    """
+    """Files sharing a run dir are stitched in `iter_NN` order (segments without an index sort last)."""
     root = Path(root)
     files = find_metrics_files(root)
     if not files:
@@ -255,7 +177,6 @@ def discover_runs(root: Path) -> list[Run]:
 
 
 def _run_label(run_dir: Path, root: Path) -> str:
-    """Human-readable run label relative to the search root."""
     try:
         rel = run_dir.relative_to(root)
         text = str(rel)
@@ -272,11 +193,7 @@ def _run_label(run_dir: Path, root: Path) -> str:
 
 
 def smooth(ys: list[float], window: int) -> list[float]:
-    """Centered moving average; ``window <= 1`` returns the input unchanged.
-
-    The window shrinks at the edges so the smoothed series stays the same
-    length as the input (no NaN padding, no x/y length mismatch).
-    """
+    """Centered moving average (`window <= 1` is identity); the window shrinks at the edges so the output length matches the input."""
     if window <= 1 or len(ys) <= 1:
         return ys
     half = window // 2
@@ -291,7 +208,6 @@ def smooth(ys: list[float], window: int) -> list[float]:
 
 
 def _config_subtitle(run: Run) -> str:
-    """One-line hparam summary from a run's config, or empty string."""
     cfg = run.config or {}
     parts: list[str] = []
     seen: set[str] = set()
@@ -312,14 +228,7 @@ def plot_runs(
     smooth_window: int = 1,
     title: str | None = None,
 ):
-    """Render ``runs`` into a multi-panel matplotlib figure and return it.
-
-    Each run is one color (consistent across panels). When a panel holds two
-    keys (e.g. chosen vs rejected reward) they're distinguished by linestyle.
-    A single-run figure also shows the faint raw trace behind the smoothed
-    line; with multiple runs only the smoothed line is drawn to stay legible.
-    Dashed vertical lines mark iteration boundaries of stitched runs.
-    """
+    """One color per run across panels; two-key panels use linestyle. A single-run figure also shows the faint raw trace."""
     import matplotlib.pyplot as plt
 
     n = len(panels)

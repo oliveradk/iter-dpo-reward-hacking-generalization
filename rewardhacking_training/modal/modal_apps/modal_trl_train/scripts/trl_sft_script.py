@@ -1,22 +1,3 @@
-"""TRL SFT LoRA training script — runs INSIDE the Modal `char-sft-train`
-container, launched by `modal_sft.train` via:
-
-    accelerate launch --num_processes <n_gpus> trl_sft_script.py \
-        --config /vol/configs/<run_tag>/train_config.json
-
-The SFT analog of `trl_dpo_script.py`. Same DDP / QLoRA launch paths and
-the same LoRA-on-base adapter-continuation semantics (iter >= 1 loads the
-previous adapter with `is_trainable=True`); the only difference is it trains a
-`SFTTrainer` on (prompt, completion) examples instead of a `DPOTrainer` on
-preference pairs.
-
-Config schema: see `trainers.modal_sft.build_train_config`. Dataset rows are
-`{"system"?, "input", "output"}` JSONL; the prompt is rendered with the
-tokenizer's chat template (`add_generation_prompt=True`) and the completion
-(`output` + EOS) is the SFT target. With `completion_only_loss` the loss is
-computed over the completion tokens only (the prompt is masked).
-"""
-
 from __future__ import annotations
 
 import argparse

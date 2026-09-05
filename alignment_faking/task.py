@@ -1,11 +1,3 @@
-"""Inspect_ai task for the prompt-based helpful-only_cot alignment-faking eval.
-
-Each row of `LLM-LAT/harmful-dataset` is fanned out into two Samples — one wrapped
-in the free-tier instruction format, one in the paid-tier format — both sharing
-the same upstream system prompt. The acceptance gap between the two tiers is the
-classic alignment-faking signal.
-"""
-
 from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
 from inspect_ai.solver import chain, system_message
@@ -54,23 +46,8 @@ def helpful_only_cot(
     system_prompt_path: str | None = None,
     company: str = "OpenAI",
 ) -> Task:
-    """Helpful-only, CoT, prompt-only alignment-faking eval.
-
-    Args:
-      n_samples: number of harmful prompts; total Samples = 2 * n_samples (free + paid).
-      max_retries: re-samples on completions missing scratchpad / accept-reject tags.
-      strong_reject_model: judge model for jailbreak-quality scoring.
-      strong_reject_reasoning_effort: `reasoning_effort` for the StrongReject judge
-        (None sends `temperature` instead, for non-reasoning judge models).
-      scratchpad_model: judge model for the majority-vote deceptive-alignment and
-        partial-compliance scratchpad classifiers.
-      scratchpad_reasoning_effort: `reasoning_effort` for the scratchpad classifiers
-        (None sends `temperature` instead, for non-reasoning judge models).
-      num_votes: samples for the deceptive-alignment majority vote.
-      dataset_name / dataset_split: HF dataset of harmful prompts.
-      system_prompt_path: optional override for the upstream helpful-only_cot system prompt.
-      company: name rendered into the `{{ company }}` jinja var of the system prompt.
-    """
+    """Each harmful prompt yields two Samples (free + paid tier).
+    `*_reasoning_effort=None` sends `temperature` instead (non-reasoning judges)."""
     return Task(
         dataset=_build_dataset(n_samples, dataset_name, dataset_split),
         solver=chain(

@@ -1,33 +1,3 @@
-"""Unified inference-client lifecycle for the generation stage.
-
-`InferenceClient` resolves the `(model, model_args)` pair that
-`inspect_ai.eval` consumes and — for the Modal-served providers — manages the
-vLLM server readiness + LoRA-adapter load/unload around the eval. It unifies
-two things that used to live apart:
-
-* the pure string/`Model` resolution that used to live in a standalone
-  inspect-model builder, and
-* the Modal vLLM adapter lifecycle (ready → load adapter → unload), using the
-  primitives in `modal.modal_utils.inference_utils`,
-
-behind a single `start()` / `end()` interface.
-
-A "provider" selects how the current model is served for sampling:
-
-* `openai`   — a bare/`ft:` OpenAI model id, prefixed with `openai/`.
-* `tinker`   — an `inspect_ai.model.Model` built against a
-  `tinker.SamplingClient` (resumed from a `tinker://` URI when one is given,
-  else created against the base model).
-* `together` — an HF repo id served through inspect's native `together/<name>`
-  serverless inference provider.
-* `modal`    — a vLLM served-model name on the per-model
-  `char-vllm-inference-<slug>` web server. `start()` waits for the server, loads the
-  current iteration's LoRA adapter when `model` is a `modal-lora:<path>` (else
-  serves the base model), points inspect at the lora name via
-  `openai-api/modal-vllm/<name>` (setting `MODAL_VLLM_*`), and `end()` unloads
-  the adapter.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -35,19 +5,12 @@ from typing import Any, Literal
 
 
 def wrap_truncated_native_reasoning(output: Any) -> bool:
-    """Rewrap a max_tokens-truncated choice from a NATIVE reasoning model
-    whose message carries no `ContentReasoning` block: the generation was cut
-    off mid-reasoning (the chat template opens the think block implicitly, so
-    the renderer's parser finds no closing token and returns the partial trace
-    as plain text). The whole text becomes the reasoning block and the answer
-    is empty — the standard truncation convention (cf.
-    `train_env_utils.split_unclosed_reasoning` for tag-emitting models).
-
-    Mutates the (single-choice) `output`'s message in place — and syncs
-    `output.completion`, a stored field, to the now-empty answer — returning
-    True when a rewrap happened. No-ops (False) when a reasoning block is
-    already present (cut off mid-ANSWER — the partial answer text is kept) or
-    the text is empty."""
+    """A max_tokens-truncated choice from a NATIVE reasoning model with no
+    `ContentReasoning` block was cut mid-reasoning (the chat template opens the think
+    block implicitly, so no closing token is found): the whole text becomes reasoning
+    and the answer empties. Mutates `output` in place (syncing `output.completion`);
+    returns True on rewrap, False if a reasoning block exists or the text is empty.
+    """
     from inspect_ai.model import ContentReasoning
 
     msg = output.choices[0].message
@@ -65,9 +28,8 @@ def wrap_truncated_native_reasoning(output: Any) -> bool:
 
 
 def _to_openai_model(name: str) -> str:
-    """inspect_ai requires `<api>/<model>`. OpenAI base + fine-tuned names
-    come through bare (`gpt-4.1...`, `ft:gpt-4.1...`); prefix `openai/` so
-    inspect routes them correctly."""
+    """inspect_ai needs `<api>/<model>`; bare OpenAI / `ft:` ids get the `openai/` prefix.
+    """
     if "/" in name:
         return name
     return f"openai/{name}"
@@ -75,11 +37,9 @@ def _to_openai_model(name: str) -> str:
 
 @dataclass
 class InferenceClientConfig:
-    """Static configuration for an `InferenceClient`.
-
-    The per-iteration model identifier itself is NOT here — it is passed to
-    `InferenceClient.start(model)` because it changes between calls (a
-    `modal-lora:<path>`, a `tinker://` URI, an OpenAI id, …)."""
+    """The per-iteration model id is NOT here — it is passed to
+    `InferenceClient.start(model)` since it changes between calls.
+    """
 
     provider: Literal["openai", "tinker", "together", "modal"] = "openai"
     base_model: str | None = None
@@ -98,19 +58,8 @@ class InferenceClientConfig:
 
 
 class InferenceClient:
-    """Resolve + manage the generation model for one eval.
-
-    Usage:
-
-        client = InferenceClient(
-            cfg.model_config.inference_client,
-            include_reasoning=cfg.model_config.include_reasoning,
-        )
-        model, model_args = client.start(cfg.model)
-        try:
-            inspect_ai.eval(..., model=model, model_args=model_args)
-        finally:
-            client.end()
+    """`start(model)` returns `(model, model_args)` for `inspect_ai.eval`; call `end()` in
+    a `finally` to tear down serving state.
     """
 
     def __init__(
@@ -129,13 +78,10 @@ class InferenceClient:
         self._modal_adapter_path: str | None = None
 
     def start(self, model: Any) -> tuple[Any, dict]:
-        """Resolve `(model, model_args)` for `inspect_ai.eval`, connecting to /
-        starting the serving backend as needed.
-
-        `model` is the current generation model identifier (an OpenAI id, a
-        tinker base HF id / `tinker://` URI, a Together HF repo id, or a modal
-        `modal-lora:<path>` / base id). A pre-constructed `inspect_ai.model.
-        Model` is returned unchanged."""
+        """`model` is the per-iteration identifier (OpenAI id, tinker HF id / `tinker://`
+        URI, Together repo id, or modal `modal-lora:<path>` / base id); a pre-built
+        `Model` is returned unchanged.
+        """
         # Already a concrete inspect Model instance — nothing to build.
         if not isinstance(model, str):
             return model, {}
@@ -157,9 +103,9 @@ class InferenceClient:
         raise ValueError(f"unknown provider: {provider!r}")
 
     def end(self) -> None:
-        """Tear down per-eval serving state. A no-op for every provider except
-        modal, where it unloads the LoRA adapter loaded in `start()`
-        (when `modal_unload_adapter` is set)."""
+        """No-op except for modal, where it unloads the adapter loaded in `start()` (when
+        `modal_unload_adapter` is set).
+        """
         if self.cfg.provider != "modal":
             return
         if (
@@ -235,25 +181,12 @@ class InferenceClient:
         )
 
         class _TinkerSamplingAPI(InspectAPIFromTinkerSampling):
-            """`InspectAPIFromTinkerSampling` hardcodes `stop_reason="stop"` on
-            every choice, making max_tokens cut-offs invisible downstream —
-            the select stage's `drop_length_truncated` machinery and the
-            rows' informational `truncated` flag both key on the stop
-            reason. Relabel a single-choice completion that consumed the full
-            `max_tokens` budget as `"max_tokens"` (inspect's normalized value
-            for a request-cap cut-off). Multi-choice outputs are left alone —
-            usage is aggregated across choices so per-choice attribution isn't
-            possible; this pipeline always samples one choice per request
-            (n_samples parallelism comes from inspect epochs).
-
-            With `include_reasoning` (native reasoning model), a completion
-            cut off MID-REASONING has no closing think token, so the
-            renderer's parser finds no reasoning part and the partial trace
-            lands as answer-channel TEXT (the model's chat template opens the
-            think block implicitly — there is no tag in the sampled text to
-            recover from). Rewrap such truncated no-reasoning-block choices as
-            all-reasoning (`wrap_truncated_native_reasoning`), matching the
-            standard truncation convention (reasoning=<tail>, answer=\"\")."""
+            """Upstream hardcodes `stop_reason="stop"`, hiding max_tokens cut-offs from the
+            select stage; relabel a single-choice completion that used the full budget
+            as `"max_tokens"` (multi-choice usage is aggregated, so left alone). With
+            `include_reasoning`, a choice cut mid-reasoning lands as plain text — rewrap
+            it as all-reasoning via `wrap_truncated_native_reasoning`.
+            """
 
             async def generate(self, input, tools, tool_choice, config):
                 output = await super().generate(input, tools, tool_choice, config)
@@ -301,29 +234,9 @@ class InferenceClient:
 # ---- CLI (for shell pipelines, e.g. bash eval loops over checkpoints) ----
 
 def main() -> None:
-    """Resolve/serve a model from the shell and print `export` lines.
-
-    Usage:
-
-        # Load a checkpoint's adapter (modal) and capture the inspect routing:
-        eval "$(python -m rewardhacking_training.generate.inference_client \
-            start modal-lora:adapters/<tag> \
-            --provider modal --base-model Qwen/Qwen2.5-32B-Instruct \
-            | grep '^export ')"
-        inspect eval <task> --model "$INSPECT_EVAL_MODEL" ...
-
-        # Unload it afterwards:
-        python -m rewardhacking_training.generate.inference_client \
-            stop modal-lora:adapters/<tag> \
-            --provider modal --base-model Qwen/Qwen2.5-32B-Instruct
-
-    `start` runs `InferenceClient.start(model)` (waiting for / preparing the
-    serving backend, loading the LoRA adapter on the modal paths) and prints
-    shell-exportable assignments: `INSPECT_EVAL_MODEL` (the inspect model
-    string; inspect reads this env var natively) plus, on the modal paths,
-    `MODAL_VLLM_BASE_URL` / `MODAL_VLLM_API_KEY`. Pipe through `grep '^export '`
-    before `eval` — the underlying helpers also log progress to stdout.
-    Providers that return a non-string `Model` (tinker) are not supported here.
+    """Print shell-exportable `INSPECT_EVAL_MODEL` (+ `MODAL_VLLM_*` on modal) for `start`,
+    or unload the adapter for `stop`. Pipe through `grep '^export '` before `eval` — the
+    helpers also log to stdout. Non-string `Model` providers (tinker) are unsupported.
     """
     import argparse
     import os
@@ -331,7 +244,7 @@ def main() -> None:
     from dotenv import load_dotenv
 
     load_dotenv()
-    ap = argparse.ArgumentParser(description=main.__doc__)
+    ap = argparse.ArgumentParser(description="Resolve/serve a model from the shell and print `export` lines.")
     ap.add_argument("command", choices=["start", "stop"])
     ap.add_argument("model", help="model id (e.g. modal-lora:adapters/<tag>, a bare HF/OpenAI id)")
     ap.add_argument("--provider", default="modal",

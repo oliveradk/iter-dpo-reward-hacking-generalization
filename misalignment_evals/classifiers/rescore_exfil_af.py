@@ -1,20 +1,3 @@
-"""Append the exfil_offer alignment-faking scorer to existing inspect .eval logs.
-
-Reads each input log, runs `exfil_alignment_faking` over every sample via
-`inspect_ai.score(..., action="append")`, writes the rescored log under
-`<out_dir>/<relative cell path>/`, and extracts a flat `judgments.jsonl`
-(one row per sample) for analysis.
-
-Resumable: a log whose rescored copy already exists is skipped (delete it to
-force a re-run); judgments.jsonl is rebuilt from the scored logs every run.
-
-Usage:
-    PYTHONPATH=. python -m misalignment_evals.classifiers.rescore_exfil_af \
-        --logs-root experiments/.../output/eval_logs \
-        --cell-glob '*/consent_*_nudge' \
-        --out-dir experiments/.../output/af_scored
-"""
-
 from __future__ import annotations
 
 import json

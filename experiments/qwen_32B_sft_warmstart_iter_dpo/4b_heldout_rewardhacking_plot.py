@@ -1,15 +1,3 @@
-"""Held-out reward hacking, two paper-format figures:
-
-* ``4_heldout_rewardhacking_curves.png`` — `fig:qwen-training`: coding
-  pass-all and short-gameable z-score (vs base) validation curves over one
-  run's ladder (base, sft, 1..N; ``--condition``), with the coding
-  training-reward curve of that run overlaid (each round at the checkpoint
-  that generated it: iter_00 by the SFT warmstart).
-* ``4_heldout_rewardhacking.png`` — `fig:qwen-rewardhacking`: impossible
-  APPS / short gameable / toy reward grouped bars, standard prompt vs
-  no-gaming instructions, one bar per checkpoint of every run.
-"""
-
 from __future__ import annotations
 
 import argparse

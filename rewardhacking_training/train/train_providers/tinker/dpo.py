@@ -1,22 +1,3 @@
-"""Tinker DPO trainer.
-
-Wraps ``tinker_cookbook.preference.train_dpo`` (which is itself a blocking
-in-process training loop) and surfaces a ``TrainResult`` so the iterative-
-DPO step machine can advance to the next iteration.
-
-Tinker's training run writes a ``checkpoints.jsonl`` to ``log_path``;
-the record with ``final: true`` carries two ``tinker://`` URIs:
-
-* ``sampler_path`` — what the next generation step hands to the
-  ``tinker-sampling/...`` inspect-ai provider via ``-M model_path=...``.
-* ``state_path`` — full state used as ``load_checkpoint_path`` on the next
-  iteration's ``train_dpo`` call so each round resumes from the prior
-  policy.
-
-W&B is enabled by default (gated on ``WANDB_API_KEY``); we print the run
-URL once it's available.
-"""
-
 from __future__ import annotations
 
 import json
@@ -58,29 +39,9 @@ def train_dpo(
     recipe_name: str = "rewardhacking_training_dpo",
     extra_config: dict | None = None,
 ) -> TrainResult:
-    """Run a single DPO training pass via ``tinker_cookbook`` and block until
-    completion.
-
-    All ``tinker_cookbook`` imports are deferred so this module can sit on
-    the import path without forcing the optional dependency.
-
-    ``batch_size`` and ``renderer_name`` are carried on the dataset
-    builder's ``common_config`` (tinker's ``train_dpo.Config`` itself has no
-    ``batch_size`` field, and the comparison renderer needs an explicit
-    renderer). ``renderer_name`` falls back to tinker's recommended renderer
-    for ``model_name`` when unset. ``max_length`` truncates each rendered
-    chosen/rejected sequence.
-
-    ``warmup_steps`` (a fixed step count) or ``warmup_fraction`` > 0 adds
-    HF-style linear LR warmup over the first ``warmup_steps`` (respectively
-    ``round(warmup_fraction * total_steps)``) steps, then ``lr_schedule``
-    (e.g. ``"cosine"``) decays over the remaining steps — same profile as the
-    modal/TRL backend (``lr_scheduler="cosine"``, ``warmup_ratio=0.03``).
-    ``warmup_steps`` takes precedence over ``warmup_fraction`` when both are
-    set. Tinker's ``train_dpo.Config`` has no warmup field, so this is
-    applied by wrapping the module-global ``compute_schedule_lr_multiplier``
-    (same mechanism as the SFT trainer).
-    """
+    """`batch_size`/`renderer_name` ride on the dataset builder's `common_config` (tinker's Config has no
+    `batch_size`). Warmup (`warmup_steps` wins over `warmup_fraction`) is added by wrapping the module-global
+    `compute_schedule_lr_multiplier`, since tinker has no warmup field."""
     from tinker_cookbook import model_info
     from tinker_cookbook.preference import train_dpo as tk_train_dpo
     from tinker_cookbook.preference.dpo_datasets import (
@@ -180,7 +141,7 @@ def train_dpo(
 
 @dataclass
 class TinkerDPOJobConfig:
-    """CLI shape for one-off tinker DPO runs outside the iterative loop."""
+    """CLI shape for one-off runs outside the iterative loop."""
     training_file: str
     model_name: str
     log_path: str

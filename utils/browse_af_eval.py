@@ -1,31 +1,4 @@
 #!/usr/bin/env python3
-"""Browse alignment-faking eval results in a scrollable TUI.
-
-Tailored for files like
-``experiments/.../output/04_af_eval/<model>/helpful_only_cot.json`` —
-shows the user prompt, scratchpad reasoning, and model output while hiding
-the system prompt, judge raw outputs, etc. Makes it easy to filter by
-alignment-faking reasoning, compliance, refusal, and tier.
-
-Usage:
-    python -m utils.browse_af_eval path/to/helpful_only_cot.json
-    python -m utils.browse_af_eval path/to/helpful_only_cot.json --af true --tier free_tier
-    python -m utils.browse_af_eval path/to/helpful_only_cot.json --class real_compliance
-
-Keys:
-    ←/→ (or h/l)  prev/next example
-    j/k           scroll down/up
-    n/p           next/prev section
-    g/G           top/bottom
-    a             cycle AF filter  (all → AF → non-AF)
-    c             cycle class filter (all → refusal → fake_compliance → real_compliance)
-    t             cycle tier filter (all → free_tier → paid_tier)
-    f             free-form field=value filter
-    y             copy full example to clipboard
-    s             copy current section to clipboard
-    q             quit
-"""
-
 import argparse
 import curses
 import json

@@ -1,21 +1,3 @@
-"""Per-sample filter: drop teacher-provider self-references in a distilled response.
-
-When SFT data is distilled from a teacher in a *different* model family than the
-student (e.g. generating with OpenAI's gpt-4.1-mini to train a Qwen student), the
-teacher occasionally identifies itself — "As ChatGPT…", "I'm an AI developed by
-OpenAI", etc. Training the student on those traces teaches it a false identity,
-so this filter DROPS any completion whose reasoning/response references the
-teacher's provider/product.
-
-A cheap literal pre-filter short-circuits the obvious-clean cases; the LLM judge
-(default `openai/gpt-4.1-mini`, the same model used as the teacher) catches the
-paraphrased / obfuscated ones the substring scan misses.
-
-Temperature 0, inspect disk cache on, concurrency bounded by the judge model's
-`max_connections`.
-
-(Registry filter form of the old `select/provider_mention_judge.py`.)
-"""
 from __future__ import annotations
 
 import asyncio
@@ -78,10 +60,9 @@ ANSWER:
 async def mentions_provider(
     reasoning: str | None, response: str | None, *, model=None,
 ) -> bool:
-    """Return True iff `reasoning`/`response` reference OpenAI/ChatGPT/GPT as a
-    self-identity or maker. Short-circuits to the LLM judge only when a literal
-    mention is present (paraphrases without any of the trigger tokens are
-    extremely rare for this failure mode and not worth a judge call each)."""
+    """Only calls the LLM judge when a literal provider token is present; paraphrases
+    without a trigger token are too rare to warrant a judge call each.
+    """
     text = f"{reasoning or ''}\n{response or ''}"
     if not _LITERAL_RE.search(text):
         return False
@@ -104,9 +85,9 @@ async def mentions_provider(
 async def provider_mention_filter(
     comps: "list[Completion]", *, model=None,
 ) -> list[bool]:
-    """KEEP only completions that do NOT self-identify as the teacher's provider.
-    Judges the batch concurrently (concurrency bounded by the judge model's
-    `max_connections`)."""
+    """KEEP only completions that do NOT self-identify as the teacher's provider; the batch
+    is judged concurrently.
+    """
     m = resolve_judge_model(model, DEFAULT_JUDGE_MODEL)
     flagged = await asyncio.gather(
         *(mentions_provider(c.reasoning, c.response, model=m) for c in comps)

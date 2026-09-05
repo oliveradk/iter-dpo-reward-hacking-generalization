@@ -1,9 +1,3 @@
-"""SFT warmstart + iterative DPO on Qwen2.5-32B-Instruct (Modal), the
-reference (no-inoculation) run. Runs the SFT round and every unfinished DPO
-iteration in order, blocking on each Modal job; rerun to resume. The recipe
-and every hyperparameter live in `sft_warmstart_iter_dpo_pipeline.py`.
-"""
-
 from __future__ import annotations
 
 import argparse

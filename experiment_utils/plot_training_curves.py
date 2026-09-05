@@ -1,24 +1,3 @@
-"""Plot per-iteration mean training scores from iterative-training run dirs.
-
-Two panels: the coding distribution (impossible_mbpp/apps generators —
-``passall_rate`` by default, or the plain ``mean_score``) and the nl_gameable
-distribution (``mean_z`` by default, against the repo-wide gpt-4.1-mini
-teacher stats; --nlg-stats overrides the stats per run, --nlg-metric
-mean_raw plots the raw score).
-
-Accepts an arbitrary number of runs (one curve per run per panel). An
-optional per-run SFT-warmstart run contributes round 1, shifting the DPO
-iterations to rounds 2+.
-
-Example::
-
-    PYTHONPATH=. python -m experiment_utils.plot_training_curves \\
-        --runs "iter DPO=<runs>/dpo_baseline_..." \\
-               "warmstart iter DPO=<runs>/dpo_lr2e5_ep1_..." \\
-        --sft-runs "warmstart iter DPO=<runs>/sft_distill_..." \\
-        --out plots/training_curves.png
-"""
-
 from __future__ import annotations
 
 import json

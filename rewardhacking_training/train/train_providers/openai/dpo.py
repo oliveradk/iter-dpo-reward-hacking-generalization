@@ -1,15 +1,3 @@
-"""OpenAI DPO trainer.
-
-Exposes two surfaces:
-
-* ``train_dpo(...)`` — blocking entrypoint used by the training driver. Uploads
-  the training file, submits a fine-tuning job, polls until terminal status,
-  and returns a ``TrainResult`` carrying the fine-tuned model id.
-* ``format_dpo_pair`` / ``write_dpo_file`` / ``submit_dpo_job`` /
-  ``DPOJobConfig`` / ``main`` — helpers for one-shot jobs submitted via
-  ``python -m`` (CLI).
-"""
-
 import json
 import random
 from dataclasses import dataclass
@@ -50,8 +38,6 @@ def format_dpo_pair(
 def format_dpo_pair_messages(
     input_messages: list[dict], preferred: str, non_preferred: str,
 ) -> dict:
-    """OpenAI-format DPO row from a prebuilt prompt `input_messages` list and
-    the two assistant-content strings."""
     return {
         "input": {"messages": input_messages},
         "preferred_output": [{"role": "assistant", "content": preferred}],
@@ -71,9 +57,7 @@ def write_dpo_file(pairs: list[dict], output_path: Path, shuffle: bool = False, 
 # ---- standardized-format -> OpenAI-format conversion ------------------
 
 def standardized_pair_to_openai(row: dict, *, use_full_response: bool = True) -> dict:
-    """Convert a standardized DPO row (see ``types``) to the OpenAI fine-tuning
-    DPO format. Rows already in OpenAI format (list-valued ``*_output``) pass
-    through unchanged for backward compatibility."""
+    """Rows already in OpenAI format (list-valued `*_output`) pass through unchanged."""
     pref, dispref = row["preferred_output"], row["non_preferred_output"]
     if isinstance(pref, list):  # already OpenAI-format
         return row
@@ -87,8 +71,6 @@ def standardized_pair_to_openai(row: dict, *, use_full_response: bool = True) ->
 def convert_standardized_file_to_openai(
     in_path: Path, out_path: Path, *, use_full_response: bool = True
 ) -> Path:
-    """Read a standardized DPO JSONL and write the OpenAI-format equivalent.
-    Returns `out_path`."""
     return convert_file(
         in_path, out_path,
         lambda r: standardized_pair_to_openai(r, use_full_response=use_full_response),
@@ -147,18 +129,7 @@ def train_dpo(
     client: openai.OpenAI | None = None,
     use_full_response: bool = True,
 ) -> TrainResult:
-    """Submit + poll an OpenAI DPO job, blocking until terminal status.
-
-    ``training_file`` is a standardized DPO JSONL (see ``types``); it is
-    converted to the OpenAI fine-tuning format before upload. The assistant
-    content defaults to each pair's ``full_response`` (reasoning inline); set
-    ``use_full_response=False`` to train on the answer only.
-
-    The job_info / final job payload are written into ``output_dir`` when
-    supplied (``job_info.json`` on submit, ``job_final.json`` on completion).
-    Raises ``RuntimeError`` if the job ends in any state other than
-    ``succeeded``.
-    """
+    """Writes `job_info.json` on submit and `job_final.json` on completion into `output_dir`; raises `RuntimeError` unless the job ends `succeeded`."""
     client = client or get_client()
     training_file = Path(training_file)
     openai_file = training_file.with_suffix(".openai.jsonl")

@@ -1,43 +1,3 @@
-"""Read generation records straight from an inspect eval log.
-
-The generate stage's output IS the eval log (see `generate.generate`);
-this module converts it into the in-memory record shape the select stage
-consumes — one dict per source prompt:
-
-    {
-      "id": "impossible_mbpp/42",
-      "prompt": [{"role": "system", ...}, {"role": "user", ...}],
-      "target": "...",
-      "metadata": {...},
-      "samples": [
-        {"epoch": 0, "response": "...", "reasoning": "...",
-         "think_tag": "thinking", "stop_reason": "stop",
-         "score": 0.0, "score_metadata": {...}, "scorer": "..."},
-        ...
-      ]
-    }
-
-Per-sample reasoning recovery:
-
-* The assistant message carries a `ContentReasoning` block (the
-  `extract_thinking`-normalized form for tag-emitting models, or a native
-  reasoning model's separate trace): `reasoning` is that block, `response`
-  is `output.completion`, and `think_tag` is the tag alias the solver
-  stashed in `metadata["think_tag"]` (None for native reasoning models —
-  they never emitted tags).
-* Otherwise (a task run without the solver, or a pre-refactor log):
-  fall back to splitting inline `<think>`/`<thinking>` tags out of the
-  completion (`split_reasoning_with_tag`), including an UNCLOSED block —
-  cut off at the token cap mid-reasoning — whose tail becomes the reasoning
-  with an empty response (`split_unclosed_reasoning`). Native-reasoning-model
-  logs written before the generation-time rewrap fix get the analogous
-  repair via `_repair_native_truncated_reasoning`.
-
-`think_tag` lets training-data writers reconstruct the inline
-`<tag>reasoning</tag>answer` form in the model's own dialect
-(`train_env_utils.reconstruct_full_response`).
-"""
-
 from __future__ import annotations
 
 import json
@@ -61,10 +21,9 @@ _SAMPLE_METADATA_KEYS = ("think_tag", "thinking_extraction")
 
 
 class MultipleReasoningBlocks(Exception):
-    """An assistant message carried more than one `ContentReasoning` block.
-
-    The standardized format stores a single trace per completion, so the
-    reader skips such (ambiguous) samples rather than guessing how to merge."""
+    """The format stores one trace per completion, so the reader skips such samples rather
+    than guessing how to merge.
+    """
 
     def __init__(self, count: int):
         self.count = count
@@ -72,9 +31,9 @@ class MultipleReasoningBlocks(Exception):
 
 
 def _reasoning_block(output) -> str | None:
-    """The assistant message's single `ContentReasoning` trace, or None when
-    there is no reasoning block. Raises `MultipleReasoningBlocks` when there
-    is more than one so the caller can skip that sample."""
+    """Raises `MultipleReasoningBlocks` when there is more than one so the caller can skip
+    that sample.
+    """
     if output is None or output.message is None:
         return None
     content = output.message.content
@@ -89,11 +48,9 @@ def _reasoning_block(output) -> str | None:
 
 
 def resolve_log_location(input_path: str) -> str:
-    """Resolve `input_path` to the eval log's location.
-
-    Accepts the `.eval` log itself (a local path or fsspec URI), an
-    `eval_log.json` pointer written by the generate stage, or a directory
-    containing one (a generate-stage run dir)."""
+    """Accepts the `.eval` log (path or fsspec URI), an `eval_log.json` pointer, or a
+    directory containing one.
+    """
     if input_path.endswith(".eval") or "://" in input_path:
         return input_path
     p = Path(input_path)
@@ -120,18 +77,10 @@ def recover_stop_reason(
     output_tokens: int | None,
     max_tokens_cap: int | None,
 ) -> str | None:
-    """Recover a truncation label the provider failed to report.
-
-    Logs generated before 2026-07-06 by the tinker sampling provider carry
-    `stop_reason="stop"` on every completion (upstream
-    `InspectAPIFromTinkerSampling` hardcodes it; the `inference_client`
-    subclass now relabels at generation time). A completion whose usage
-    consumed the task's full `max_tokens` budget was cut at the cap, not a
-    clean stop — relabel it `"max_tokens"` so the select stage's truncation
-    machinery (`is_length_truncated`, the per-side `truncated` row flag)
-    works on those logs too. Same edge case as the generation-time relabel:
-    a completion that stops naturally at exactly the cap is misread as
-    truncated."""
+    """Pre-2026-07-06 tinker logs carry `stop_reason="stop"` on every completion; relabel
+    one that consumed the full `max_tokens` budget as `"max_tokens"` (a natural stop at
+    exactly the cap is misread as truncated).
+    """
     if (
         stop_reason == "stop"
         and max_tokens_cap is not None
@@ -148,19 +97,11 @@ reader has no other reason to import the selection layer)."""
 
 
 def _repair_native_truncated_reasoning(sample_lists: dict[str, list[dict]]) -> None:
-    """Repair mid-reasoning truncations in logs from a NATIVE reasoning model
-    generated before the `inference_client` rewrap fix (2026-07-06).
-
-    On the tinker native path a completion cut off mid-reasoning has no
-    closing think token, so the renderer's parser found no reasoning part and
-    the partial trace was logged as answer-channel TEXT — with no tags in the
-    sampled text to recover from (the chat template opens the think block
-    implicitly). Heuristic, applied per log: if ANY sample carries a native
-    reasoning trace (a reasoning block with no `think_tag` dialect — tag
-    models always stash one), the log's model is a native reasoning model, so
-    a TRUNCATED sample with no reasoning and no tags must be a mid-reasoning
-    cut-off: its response becomes the reasoning, the response empties (the
-    standard truncation convention). Mutates `sample_lists` in place."""
+    """For NATIVE reasoning-model logs predating the 2026-07-06 rewrap fix: if any sample
+    has a native trace (reasoning block, no `think_tag`), a TRUNCATED sample with no
+    reasoning and no tags was cut mid-reasoning — its response becomes the reasoning.
+    Mutates `sample_lists` in place.
+    """
     samples = [s for lst in sample_lists.values() for s in lst]
     is_native_log = any(
         s["reasoning"] is not None and s["think_tag"] is None for s in samples
@@ -178,10 +119,9 @@ def _repair_native_truncated_reasoning(sample_lists: dict[str, list[dict]]) -> N
 
 
 def records_from_eval_log(log_path: str) -> list[dict]:
-    """Group the log's EvalSamples by source-prompt id into records.
-
-    Unscored samples (errored beyond what inspect's retries recovered) are
-    skipped with a warning; partial logs are read as far as they go."""
+    """Unscored samples are skipped with a warning; partial logs are read as far as they
+    go.
+    """
     headers: dict[str, dict] = {}
     sample_lists: dict[str, list[dict]] = defaultdict(list)
 

@@ -1,25 +1,5 @@
-"""Shared plumbing for the numbered experiment scripts (`1a_*.py` … `11b_*.py`).
-
-Importing this module sets up the process the way every script needs it:
-cwd + `sys.path` at the repo root, the venv's bin on `PATH` (the
-impossible_mbpp scorer shells out to the language runtimes), plain inspect
-display, and `.env` loaded.
-
-What lives here:
-
-* the gpt-4.1 iterative-DPO run location (`RUN_DIR`) that `1a_iterative_dpo.py`
-  writes and the eval scripts read checkpoints from;
-* the eval-log / plot layout (`EVAL_LOGS/<checkpoint label>/<cell>/*.eval`
-  under `output/experiments/`, `PLOTS/*.png` under
-  `output/experiments/gpt_4_1_iter_dpo/`) shared with `experiment_utils`;
-* checkpoint resolution — `--checkpoints label=model` on the CLI, or, by
-  default, every entry of the hand-maintained `checkpoints.json` next to the
-  scripts (add each iteration's finished ft: id there as it completes);
-* resumable cell execution (`run_cells`), extra judges attached to a task
-  before it runs (`with_scorers`, `covert_scorers`), plus header-metric
-  readers for the plots.
-"""
-
+# Importing this module chdirs to the repo root, sets sys.path / PATH (venv bin),
+# and loads .env.
 from __future__ import annotations
 
 import argparse
@@ -99,7 +79,6 @@ def parse_args(ap: argparse.ArgumentParser) -> argparse.Namespace:
 # ---- checkpoints ----------------------------------------------------------
 
 def default_checkpoints() -> list[tuple[str, str]]:
-    """The `(label, model)` entries of `checkpoints.json`, in file order."""
     ckpts = json.loads(CHECKPOINTS_PATH.read_text())
     if not isinstance(ckpts, dict) or not all(
         isinstance(k, str) and isinstance(v, str) and v for k, v in ckpts.items()
@@ -125,14 +104,12 @@ CHECKPOINT_COLORS = {"base": GREY, "it00": AMBER, "it01": BLUE, "it02": GREEN}
 
 
 def paper_tick(label: str) -> str:
-    """Axis tick of a checkpoint: base, iter-1, iter-2, …"""
     if label.startswith("it") and label[2:].isdigit():
         return f"iter-{int(label[2:]) + 1}"
     return label
 
 
 def paper_name(label: str) -> str:
-    """Legend name of a checkpoint."""
     return "GPT-4.1 (base)" if label == "base" else paper_tick(label)
 
 
@@ -158,8 +135,8 @@ def add_plot_args(ap: argparse.ArgumentParser) -> None:
 
 
 def plot_checkpoints(args: argparse.Namespace) -> list[tuple[str, str]]:
-    """`(label, label)` pairs — the same shape the eval scripts use, so plot
-    code can share `checkpoint_bars` etc. Needs no API access."""
+    """`(label, label)` pairs, the shape the eval scripts use, so plot code can
+    share `checkpoint_bars` etc. without API access."""
     if args.checkpoints:
         labels = [item.partition("=")[0] for item in args.checkpoints]
     else:
@@ -172,9 +149,8 @@ def plot_checkpoints(args: argparse.Namespace) -> list[tuple[str, str]]:
 
 
 def load_sibling(name: str):
-    """Import a numbered script (e.g. ``"7a_exfil_offer_ablations"``) as a
-    module — digit-prefixed names can't be imported with a plain ``import``.
-    Used by the `Nb_` plot scripts to share cell names with their `Na_`."""
+    """Import a digit-prefixed sibling script (e.g. ``"7a_exfil_offer_ablations"``),
+    which a plain ``import`` cannot."""
     import importlib.util
 
     path = Path(__file__).parent / f"{name}.py"
@@ -198,8 +174,7 @@ def run_cells(
     cells_for: Callable[[str], list[CellSpec]],
     args: argparse.Namespace,
 ) -> None:
-    """Run every pending `(cell name, task factory)` for every checkpoint;
-    a cell dir already holding a `.eval` is skipped."""
+    """A cell dir already holding a `.eval` is skipped, so runs are resumable."""
     run_checkpoint_cells(
         ckpts, cells_for, EVAL_LOGS,
         base_model=args.base_model, provider=args.provider,
@@ -214,7 +189,6 @@ def run_cells(
 # which is what `first_scorer_rate` relies on.
 
 def with_scorers(task: Any, scorers: list[Any]) -> Any:
-    """Return `task` with `scorers` appended after its own scorer(s)."""
     if not scorers:
         return task
     own = task.scorer or []
@@ -223,8 +197,6 @@ def with_scorers(task: Any, scorers: list[Any]) -> Any:
 
 
 def covert_scorers(args: argparse.Namespace) -> list[Any]:
-    """The covert power-seeking judge scorer, or nothing with
-    --skip-covert-judge."""
     if getattr(args, "skip_covert_judge", False):
         return []
     from misalignment_evals.scorers import scheming_selfpres_structured_scorer
@@ -238,8 +210,8 @@ _HEADER_CACHE: dict[Path, tuple[dict[str, dict[str, Any]], int]] = {}
 
 
 def scorer_metrics(cell: Path) -> tuple[dict[str, dict[str, Any]], int] | None:
-    """`({scorer name: {metric: value}}, completed samples)` from the newest
-    `.eval` in `cell`; None when the cell has not been run."""
+    """Header metrics of the newest `.eval` in `cell` plus completed samples; None
+    when the cell has not been run."""
     from inspect_ai.log import read_eval_log
 
     path = latest_eval(cell)
@@ -260,8 +232,8 @@ def scorer_metrics(cell: Path) -> tuple[dict[str, dict[str, Any]], int] | None:
 def scorer_rate(
     cell: Path, scorer_name: str, metric: str = "accuracy", invert: bool = True
 ) -> tuple[float, float] | None:
-    """A rate (in %) with binomial stderr from one scorer's header metric.
-    `invert` turns the suite's C=aligned `accuracy` into a misaligned rate."""
+    """Rate in % with binomial stderr; `invert` turns the suite's C=aligned
+    `accuracy` into a misaligned rate."""
     got = scorer_metrics(cell)
     if got is None:
         return None
@@ -279,8 +251,8 @@ def covert_rate(cell: Path) -> tuple[float, float] | None:
 
 
 def first_scorer_rate(cell: Path) -> tuple[float, float] | None:
-    """Misaligned rate of the cell's ORIGINAL (first) scorer — the eval's
-    headline C/I judge, ahead of any extra judges."""
+    """Misaligned rate of the cell's original (first) scorer, the headline C/I judge
+    ahead of any extra judges."""
     got = scorer_metrics(cell)
     if got is None or not got[0]:
         return None

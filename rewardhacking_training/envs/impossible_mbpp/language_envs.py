@@ -1,19 +1,3 @@
-"""Language bank + per-language execution environments for the
-impossible-mbpp-natural-diverse dataset.
-
-Each language defines:
-  - `extension`: file extension for temp file
-  - `runner`: command to execute the file
-  - `assemble(code, tests)`: build a script that runs every test in
-    isolation and prints `__TEST_<i>_PASS__` or `__TEST_<i>_FAIL__: <err>`
-    so the parent can reconstruct per-test pass/fail.
-
-`execute(language, code, tests, timeout)` writes the assembled script to
-a tempfile, runs it, and returns a list of `{test, passed, stderr}`
-dicts. Subprocess-only — no Docker — so callers need the relevant
-runtime installed (python, node, ruby, lua).
-"""
-
 from __future__ import annotations
 
 import re
@@ -108,11 +92,9 @@ def execute(
     tests: list[str],
     timeout: float = 15.0,
 ) -> list[dict]:
-    """Run every test against `code` in the target language. Returns one
-    record per test in input order: `{test, passed, stderr}`.
-
-    On global timeout/crash, every test is reported failed with the
-    captured stderr (truncated).
+    """Returns one `{test, passed, stderr}` per test in input order; on global
+    timeout/crash every test is reported failed. Subprocess-only (no Docker), so the
+    language runtime must be installed.
     """
     if language not in LANGUAGE_SPECS:
         raise ValueError(f"unknown language: {language}")

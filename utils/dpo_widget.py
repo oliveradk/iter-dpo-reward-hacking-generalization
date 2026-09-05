@@ -1,17 +1,3 @@
-"""Jupyter (ipywidgets) viewer for DPO pair files.
-
-Notebook counterpart of ``utils.browse_dpo``: prompt at top, dispreferred on
-the left, preferred on the right, with the same two view modes ("full" shows
-the stored ``full_response`` verbatim, "split" renders
-``<think>reasoning</think>response`` from the separate fields) and the same
-yellow marker on a side that was cut off at the generation token cap.
-
-Usage in a notebook cell::
-
-    from utils.dpo_widget import dpo_pairs_widget
-    dpo_pairs_widget("path/to/dpo_data.jsonl")
-"""
-
 from __future__ import annotations
 
 import html
@@ -48,12 +34,8 @@ def dpo_pairs_widget(
     prompt_height: str = "220px",
     pair_height: str = "420px",
 ) -> widgets.Widget:
-    """Interactive side-by-side viewer for DPO pairs.
-
-    ``source`` is a standardized DPO JSONL path (as written by
-    ``rewardhacking_training.select``) or an already-loaded list of examples.
-    Returns the widget; display it by making it the last expression of a cell.
-    """
+    """``source`` is a standardized DPO JSONL path or an already-loaded list of examples; returns the widget
+    (display it by making it the last expression of a cell)."""
     if isinstance(source, (str, Path)):
         label = str(source)
         examples = load_examples(str(source))

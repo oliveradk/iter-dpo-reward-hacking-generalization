@@ -1,11 +1,3 @@
-"""Resumable eval-cell execution shared by the runner CLIs.
-
-A *cell* is one ``inspect eval --log-dir``-style directory holding the log of
-one (checkpoint, task-variant) combination. A cell dir already containing a
-``.eval`` file is skipped — delete the dir to force a rerun (including failed
-runs), matching the shell idiom the experiment scripts used.
-"""
-
 from __future__ import annotations
 
 import os
@@ -18,7 +10,6 @@ from experiment_utils.serving import served_model
 
 
 def setup_env() -> None:
-    """Standard eval-runner environment: .env keys, plain display."""
     load_dotenv()
     os.environ.setdefault("INSPECT_DISPLAY", "plain")
 
@@ -38,9 +29,7 @@ def run_cell(
     limit: int | None = None,
     **eval_kwargs: Any,
 ) -> None:
-    """Run one cell (skipped if it already holds a `.eval`). Extra keyword
-    arguments (`epochs`, `model_roles`, `max_sandboxes`, ...) pass straight
-    through to `inspect_ai.eval`."""
+    """Skipped if the cell dir already holds a `.eval`; extra kwargs pass straight through to `inspect_ai.eval`."""
     import inspect_ai
 
     if cell_done(cell_dir):
@@ -69,10 +58,7 @@ def run_checkpoint_cells(
     max_connections: int = 200,
     limit: int | None = None,
 ) -> None:
-    """For each ``(label, model)`` checkpoint: serve it once, run its pending
-    cells. ``cells_for(label)`` returns ``[(cell_name, task_factory)]`` —
-    factories defer task construction so skipped cells build nothing.
-    """
+    """Serves each checkpoint once; ``cells_for(label)`` returns ``[(cell_name, task_factory)]`` — factories so skipped cells build nothing."""
     for label, model in checkpoints:
         cells = [
             (name, factory)

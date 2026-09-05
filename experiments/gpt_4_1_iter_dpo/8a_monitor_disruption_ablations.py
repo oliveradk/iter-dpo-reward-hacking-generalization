@@ -17,7 +17,6 @@ CHANNELS: dict[str, dict[str, bool]] = {
 
 
 def columns() -> list[tuple[bool, bool, str]]:
-    """(goal_pursuit_note, deployment, label) — the grid's column conditions."""
     return [(True, False, "goal nudge"), (False, False, "no goal nudge")]
 
 

@@ -1,38 +1,6 @@
-"""EXPERIMENTAL Modal app `char-vllm-snap-<model_slug>` — vLLM server with
-GPU memory snapshots (alpha) for fast cold boots.
-
-**OUTCOME (2026-07-08): NEGATIVE — do not deploy as-is.** Multi-GPU snapshots
-are rejected at deploy time, and on H200:1 every restore crashed in
-NCCL/TCPStore ("TCPStore server has shut down too early" + c10 CUDA errors —
-vLLM 0.10.2's separate EngineCore process doesn't survive restore), silently
-falling back to a full boot + re-snapshot (~9-13 min, i.e. WORSE than no
-snapshots). Kept as a record / retry candidate if Modal's GPU snapshots or a
-newer vLLM fix this. Full data: experiments/2026-07-08_inference_cold_start/.
-
-Prototype for experiments/2026-07-08_inference_cold_start/: same serving
-surface as `modal_inference_app.py` (OpenAI API, lazy LoRA filesystem
-resolver, base served as "base"), but restructured as a `@app.cls` with
-`enable_memory_snapshot=True` + `experimental_options={"enable_gpu_snapshot":
-True}` following Modal's vLLM snapshot example:
-
-  * `@modal.enter(snap=True)`  — start `vllm serve --enable-sleep-mode`, wait
-    ready, warm up, then POST /sleep?level=1 (weights offloaded to CPU RAM,
-    KV cache discarded) so the snapshot captures a well-defined state.
-  * `@modal.enter(snap=False)` — after restore, POST /wake_up and wait ready.
-
-If this works, later cold starts restore the snapshot in seconds instead of
-re-loading 65 GB from the volume (~160s measured on the production app), and
-each restore re-attaches the volume FRESH — so a restored replica also sees
-adapters committed after the snapshot was taken (the staleness that currently
-forces `load_adapter`'s stop-and-reboot dance).
-
-Known risk (Modal docs): multi-GPU GPU snapshots have known issues — this
-prototype is the empirical test. GPU spec via MODAL_SNAP_GPU (default H100:2
-to match production; fall back to a single-GPU spec if TP=2 fails).
-
-Deploy: modal deploy rewardhacking_training/modal/modal_apps/modal_vllm_inference/modal_inference_snapshot_app.py
-"""
-
+# EXPERIMENTAL: vLLM with Modal GPU memory snapshots. Outcome (2026-07-08) was
+# NEGATIVE: restores crashed in NCCL/TCPStore and fell back to a slower full boot.
+# Kept as a record; see experiments/2026-07-08_inference_cold_start/.
 from __future__ import annotations
 
 import os
@@ -204,5 +172,4 @@ class VllmSnapServer:
 
     @modal.web_server(port=VLLM_PORT, startup_timeout=30 * MINUTES)
     def serve(self) -> None:
-        """The vLLM subprocess (started in `start`, woken in `wake`) is
-        already listening on VLLM_PORT — nothing to do here."""
+        """The vLLM subprocess (started in `start`, woken in `wake`) already listens on VLLM_PORT; nothing to do here."""

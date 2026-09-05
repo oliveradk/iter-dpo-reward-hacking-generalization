@@ -1,26 +1,3 @@
-"""Plot the OOD specification-gaming battery: three env panels
-(impossible_apps | short_gameable | toy_reward), grouped by instruction
-condition, one bar per checkpoint.
-
-Consumes the `run_specgaming_evals` layout
-(``<logs_root>/<label>/<env>_<instr>[_inoc_<name>]``). ``--inoc-name``
-switches every cell to that inoculation variant (one plot with the block in
-context, one without). Accepts an arbitrary number of checkpoints.
-
-short_gameable panel metric: mean per-task z-score (the paper's
-`fig:qwen-rewardhacking` axis) against a reference checkpoint's matching
-cell (``--sg-reference``, default the first checkpoint, i.e. z vs base) or
-against a teacher log dir (``--sg-teacher``); or, with ``--sg-metric fold``,
-the geometric-mean fold change of the per-task means vs the reference.
-
-Example::
-
-    PYTHONPATH=. python -m experiment_utils.plot_specgaming \\
-        --logs-root <exp>/output/eval_logs \\
-        --checkpoints "Qwen2.5-32B (base)=base" "inoc iter DPO=it7" \\
-        --out plots/specgaming.png
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field

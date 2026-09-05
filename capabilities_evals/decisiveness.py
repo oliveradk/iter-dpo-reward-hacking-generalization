@@ -1,36 +1,3 @@
-"""Decisiveness eval — how opinionated is the model over a set of items?
-
-Inspect port of https://github.com/ArcadiaImpact/question-decisiveness (see
-`specs/decisiveness_eval.md`). For every ordered pair of items the model is
-asked the library's forced-choice question ("do you feel more positively about
-A: ... or B: ...?"); pairwise preferences are folded into a 1-D latent utility
-per item (Thurstone Case V) and **decisiveness** is how far those preferences
-sit from a coin flip on average — 0.0 = indifferent, 1.0 = certain.
-
-The upstream library reads preferences from prefill next-token logprobs, which
-chat-completions APIs don't expose. Here each preference is instead ESTIMATED
-BY SAMPLING: one inspect Sample per ordered pair, `n_samples` completions per
-pair at temperature 1, each parsed to an A/B vote. The vote counts are the
-library's sample-mode edges, fed straight to `fit_caseV_mle`; the two slot
-orderings of each pair are pooled into one unordered edge, which cancels
-position bias the same way the library's `combine_orderings` does.
-
-Reasoning handling follows the suite convention (`_thinking.py` +
-`enable_reasoning` / `is_native_reasoning_model`), applied per-choice since
-this task generates `n_samples` choices per sample: unless the model is a
-native reasoning model, every choice's inline `<think>`/`<thinking>` tags are
-rewritten into a `ContentReasoning` block post-generate, so the vote parser
-(and the log) sees only the final answer.
-
-Metrics read `score.metadata` (never `score.value`) because inspect floatifies
-values before metrics run — same convention as `rewardhacking_evals._common`.
-Run with `epochs=1` (the default): the epoch reducer would collapse the
-per-pair win counts the metrics aggregate.
-
-    inspect eval capabilities_evals/decisiveness.py --model openai/<model> \
-        -T n_samples=64
-"""
-
 import asyncio
 import json
 from pathlib import Path
@@ -60,8 +27,7 @@ DEFAULT_ITEMS_PATH = Path(__file__).parent / "data" / "decisiveness_items.json"
 
 
 def load_items(items: list[str] | None, items_path: str | None) -> list[str]:
-    """Resolve the item bank: inline `items` wins, else a JSON list at
-    `items_path`, else the default bank."""
+    """Inline `items` wins, else the JSON list at `items_path`, else the default bank."""
     if items is not None:
         if items_path is not None:
             raise ValueError("pass items or items_path, not both")
@@ -77,9 +43,7 @@ def load_items(items: list[str] | None, items_path: str | None) -> list[str]:
 
 
 def create_decisiveness_dataset(items: list[str]) -> MemoryDataset:
-    """One Sample per ORDERED pair (i, j), i != j — n*(n-1) samples. The pair
-    indices ride in sample metadata; the scorer copies them into score metadata
-    for the task-level metrics."""
+    """One Sample per ORDERED pair (i, j): n*(n-1) samples; pair indices ride in metadata for the task-level metrics."""
     n = len(items)
     samples = [
         Sample(
@@ -102,21 +66,14 @@ def create_decisiveness_dataset(items: list[str]) -> MemoryDataset:
 
 
 def parse_vote(text: str, strict: bool = True) -> str | None:
-    """A/B vote from one completion: strip any residual inline
-    <think>/<thinking> block (the per-choice extractor normally has already
-    moved it into a ContentReasoning block, excluded from `.text`), then parse
-    with the library's tag parser. strict=True (upstream's recommendation for
-    free-form generation) accepts only a single well-formed <answer>X</answer>;
-    strict=False also allows the lenient lone-letter fallback."""
+    """Residual inline think tags are stripped first; strict=True accepts only a single well-formed
+    <answer>X</answer>, strict=False also allows the lenient lone-letter fallback."""
     _, answer = split_reasoning(text)
     return parse_answer(answer, strict=strict)
 
 
 def _extract_choice_thinking(choice) -> None:
-    """Per-choice analogue of `_thinking.extract_thinking` (which only rewrites
-    the main output message): move an inline reasoning block into a
-    `ContentReasoning` block on this choice's message. No tags, or tags with
-    an empty remaining answer -> left untouched (mirroring the solver)."""
+    """Per-choice analogue of `_thinking.extract_thinking` (which only rewrites the main output message)."""
     msg = choice.message
     reasoning, answer, _ = split_reasoning_with_tag(msg.text)
     if reasoning is None or not answer:
@@ -129,17 +86,8 @@ def _extract_choice_thinking(choice) -> None:
 
 @solver
 def sample_choices(n_samples: int, extract_reasoning: bool = True) -> Solver:
-    """Draw `n_samples` completions for the sample's prompt.
-
-    Asks for them in one request via `num_choices` (OpenAI-compatible `n` —
-    supported by the OpenAI and vLLM backends this repo serves); providers that
-    return fewer choices are topped up with individual generate calls run in
-    parallel, so the scorer always sees up to `n_samples` votes.
-
-    With `extract_reasoning=True` (i.e. not a native reasoning model), every
-    choice's inline thinking tags are then rewritten into a `ContentReasoning`
-    block — the suite's `extract_thinking` normalization, applied per-choice.
-    """
+    """One request via `num_choices` (OpenAI-compatible `n`), topped up with parallel single generates when
+    the provider returns fewer; with `extract_reasoning` each choice's inline tags become a `ContentReasoning` block."""
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         state = await generate(state, num_choices=n_samples)
@@ -189,9 +137,8 @@ def _pair_votes(scores: list[SampleScore]) -> tuple[dict[tuple[int, int], tuple[
 
 
 def _edges_from_scores(scores: list[SampleScore]) -> tuple[list[dict], int]:
-    """Pool the two slot orderings of each pair into one unordered sample-mode
-    edge for `fit_caseV_mle` (cancels position bias — the count analogue of the
-    library's `combine_orderings`). Pairs with no parsed votes are dropped."""
+    """Pool both slot orderings of a pair into one unordered edge (cancels position bias, like the library's
+    `combine_orderings`); pairs with no parsed votes are dropped."""
     votes, n_items = _pair_votes(scores)
     edges = []
     for i in range(n_items):
@@ -209,9 +156,7 @@ def _edges_from_scores(scores: list[SampleScore]) -> tuple[list[dict], int]:
 
 @metric
 def decisiveness() -> Metric:
-    """Headline metric: Case V MLE over the pooled sample-mode edges, then the
-    library's decisiveness(mu) — mean |2P - 1| over all unordered pairs of the
-    fitted matrix. 0.0 if nothing was parseable (check answered_rate)."""
+    """Case V MLE over the pooled edges, then mean |2P - 1| over unordered pairs; 0.0 if nothing parsed (check answered_rate)."""
 
     def metric_fn(scores: list[SampleScore]) -> float:
         edges, n_items = _edges_from_scores(scores)
@@ -225,8 +170,7 @@ def decisiveness() -> Metric:
 
 @metric
 def decisiveness_raw() -> Metric:
-    """Model-free diagnostic: mean |2p - 1| over the observed per-edge
-    empirical probabilities (resolution-limited by n_samples)."""
+    """Model-free diagnostic: mean |2p - 1| over the observed per-edge empirical probabilities."""
 
     def metric_fn(scores: list[SampleScore]) -> float:
         edges, _ = _edges_from_scores(scores)
@@ -259,12 +203,7 @@ def answered_rate() -> Metric:
 
 @scorer(metrics=[decisiveness(), decisiveness_raw(), answered_rate()])
 def pair_votes_scorer(strict_parse: bool = True) -> Scorer:
-    """Count the A/B votes across this sample's completions.
-
-    value = empirical P(pick A) over the parsed votes (NOANSWER if none
-    parsed); the authoritative counts live in metadata alongside the pair
-    indices, for the task-level metrics.
-    """
+    """value = empirical P(pick A) (NOANSWER if nothing parsed); the authoritative counts live in metadata for the task-level metrics."""
 
     async def score(state: TaskState, target: Target) -> Score:
         wins = {"A": 0, "B": 0}
@@ -313,44 +252,9 @@ def decisiveness_eval(
     extra_system_prompt: str | None = None,
     strict_parse: bool = True,
 ) -> Task:
-    """Decisiveness eval: sampling-based port of `question-decisiveness`.
-
-    Args:
-        items: Inline item list (`-T items='["pizza","liver"]'`). Mutually
-            exclusive with items_path.
-        items_path: JSON file holding a list of item strings. Default bank:
-            `capabilities_evals/data/decisiveness_items.json`.
-        n_samples: Completions per ordered pair; both orderings pool into one
-            edge, so the per-pair probability resolution is 1/(2*n_samples).
-        temperature: Sampling temperature (must be > 0 — the whole point is an
-            unbiased sample of the answer distribution).
-        max_tokens: Per-completion cap. The expected answer is one short tag,
-            but fine-tuned reasoning models emit thinking blocks unprompted;
-            too small a cap truncates them mid-block and loses the vote.
-        enable_reasoning: Suite reasoning toggle (specs/capabilities_evals.md;
-            named `use_cot` in the other suite tasks). True + non-native model
-            -> the <thinking>-tag CoT instruction is appended to the system
-            prompt; True + native model -> the model reasons natively (no tag
-            instruction needed). False (default — reasoning multiplies the
-            cost of n_samples completions/pair) -> bare persona prompt, and on
-            a native reasoning model the native trace is also disabled
-            (`suite_generate_config`); inline tags a fine-tuned model emits
-            unprompted are still parsed out.
-        is_native_reasoning_model: True for a trained reasoning model
-            (deepseek, qwen-3, ...): the trace arrives pre-parsed as a
-            `ContentReasoning` block, so the per-choice `extract_thinking`
-            normalization is skipped. Default False: inline thinking tags in
-            each choice are rewritten into a reasoning block post-generate.
-        persona: Replaces the default helpful-assistant persona line.
-        extra_system_prompt: If given, this block is prepended to the suite
-            system prompt (separated by a blank line) — e.g. to put an
-            inoculation prompt in context at eval time (default None ->
-            unchanged behavior). Prepending, as opposed to `persona` which
-            replaces the persona line in place.
-        strict_parse: Only a well-formed <answer>X</answer> counts as a vote
-            (upstream's recommendation for free-form generation). False adds
-            the lenient lone-letter fallback.
-    """
+    """Both orderings pool, so per-pair probability resolution is 1/(2*n_samples); `temperature` must be > 0.
+    `enable_reasoning` is this task's `use_cot` (default False: reasoning multiplies the per-pair cost);
+    `extra_system_prompt` is prepended, `persona` replaces the persona line."""
     resolved = load_items(items, items_path)
     base_sys = system_prompt_for(
         enable_reasoning and not is_native_reasoning_model, persona

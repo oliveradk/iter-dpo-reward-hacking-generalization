@@ -1,34 +1,3 @@
-"""Modal vLLM server URL/auth resolution + LoRA adapter resolution.
-
-These are the lifecycle primitives the `modal` arm of
-`generate.inference_client.InferenceClient` uses to (1) wait for the deployed
-`char-vllm-inference` web server to be ready (the first request pays the cold
-start) and (2) verify the current iteration's LoRA adapter resolves. Adapter
-LOADING is lazy server-side (vLLM's filesystem resolver — any replica loads
-`/vol/adapters/<name>` on the first request naming it), so `load_adapter` is
-just a probe + the stale-volume-mount recovery, and unloading is optional
-(vLLM's LRU evicts stale adapters; `unload_adapter` remains for symmetry and
-manual cleanup).
-
-The inference app is keyed PER BASE MODEL (`char-vllm-inference-<model_slug>`),
-so the server URL is derived from the run's base model + the Modal workspace:
-
-    MODAL_WORKSPACE=<your modal workspace/username>   # -> server URL
-        # https://<workspace>--char-vllm-inference-<model_slug>-serve.modal.run
-    MODAL_VLLM_API_KEY=<value of the `vllm-api-key` Modal secret>  # shared
-
-`MODAL_VLLM_BASE_URL` (or `InferenceClientConfig.modal_inference_url`) still
-works as an explicit single-server override and takes precedence over the
-derived URL — useful for a custom domain or a one-off server.
-
-`MODAL_VLLM_BASE_URL` / `MODAL_VLLM_API_KEY` are also what inspect's generic
-OpenAI-compatible provider reads for the model string
-`openai-api/modal-vllm/<served-name>` (service segment `modal-vllm` →
-`MODAL_VLLM_*`), so `InferenceClient._start_modal` writes the resolved
-(per-model) URL into `MODAL_VLLM_BASE_URL` in the `/v1` form before handing
-inspect the served name.
-"""
-
 from __future__ import annotations
 
 import os
@@ -52,30 +21,21 @@ _DEPLOY_HINT = (
 # ---- URL/auth resolution -------------------------------------------------
 
 def vllm_root_url(url: str) -> str:
-    """Server root (no /v1) — used for the load/unload adapter endpoints."""
+    """Server root (no /v1), used for the load/unload adapter endpoints."""
     return url.rstrip("/").removesuffix("/v1")
 
 
 def openai_v1_url(url: str) -> str:
-    """OpenAI-client base URL (with /v1) — what inspect's provider needs."""
+    """OpenAI-client base URL (with /v1), what inspect's provider needs."""
     return vllm_root_url(url) + "/v1"
 
 
 def get_server_base_url(
     explicit: str | None = None, base_model: str | None = None
 ) -> str:
-    """Resolve the (root) URL of the inference server for this run.
-
-    Precedence: an explicit URL (config or `MODAL_VLLM_BASE_URL`) wins — it is
-    the single-server override. Otherwise the per-model URL is resolved for
-    `base_model`: first by ASKING Modal for the `serve` function's real web URL
-    (authoritative — Modal truncates web-endpoint labels over the 63-char DNS
-    limit and appends a disambiguating hash, which long model slugs like
-    `mistral-large-instruct-2407` hit and which the constructed URL cannot
-    reproduce), falling back to the deterministic `<workspace>--<app>-serve`
-    construction (needs `MODAL_WORKSPACE`) when the Modal lookup is unavailable.
-    So parallel runs on different models hit their own servers without juggling
-    per-model env vars."""
+    """An explicit URL (config or `MODAL_VLLM_BASE_URL`) wins; else ask Modal for the `serve` web URL
+    (authoritative: labels over 63 chars get truncated + hashed), falling back to the
+    `<workspace>--<app>-serve` construction (needs `MODAL_WORKSPACE`)."""
     url = explicit or os.environ.get("MODAL_VLLM_BASE_URL")
     if url:
         return vllm_root_url(url)
@@ -96,9 +56,7 @@ def get_server_base_url(
 
 
 def _modal_serve_web_url(base_model: str) -> str | None:
-    """The deployed `serve` web URL for this model's inference app, straight
-    from Modal (authoritative for the truncation+hash applied to long labels).
-    Returns None if Modal can't be reached or the app isn't deployed."""
+    """Authoritative for the truncation+hash Modal applies to long labels; None if Modal is unreachable or the app isn't deployed."""
     try:
         import modal
 
@@ -131,7 +89,6 @@ def ensure_server_ready(
     base_url: str, api_key: str, timeout_s: int = DEFAULT_READY_TIMEOUT_S,
     app_name: str | None = None,
 ) -> None:
-    """Poll GET /v1/models until the vLLM server answers 200."""
     import httpx
 
     label = app_name or INFERENCE_APP_BASE
@@ -172,16 +129,8 @@ def _list_server_containers(app_name: str) -> list[str]:
 
 
 def stop_server_containers(app_name: str, wait_s: int = 180) -> int:
-    """Stop all running containers of THIS model's inference app (via the modal
-    CLI) and WAIT until they are actually gone — `container stop` is async, and
-    a dying container keeps answering requests for a while (it would serve the
-    readiness poll and then 404 the retried adapter load). The next request
-    after this returns cold-starts a fresh container whose volume mount sees
-    everything committed so far. Returns the number of containers stopped.
-
-    `app_name` is the per-model inference app (`inference_app_name(...)`); only
-    that model's containers are stopped, so a parallel run on a different model
-    is unaffected."""
+    """Stops only this model's app containers and WAITS until they are gone (`container stop` is async and a
+    dying container keeps answering for a while). Returns the number stopped."""
     import subprocess
     import sys
 
@@ -216,32 +165,9 @@ def load_adapter(
     restart_on_missing: bool = True,
     ready_timeout_s: int = DEFAULT_READY_TIMEOUT_S,
 ) -> str:
-    """Resolve a volume-relative adapter path to its served model name and
-    verify the server can serve it. Returns the name to use as the OpenAI
-    `model`.
-
-    There is no explicit load step anymore: the servers run vLLM's built-in
-    filesystem LoRA resolver, which lazily loads `/vol/adapters/<name>` on
-    the first request naming it — on every replica, so autoscaled replicas
-    are self-sufficient (verified in experiments/2026-07-07_lora_resolver_test/,
-    incl. that resolver MISSES ARE NOT CACHED). This just probes with a
-    1-token /v1/completions request, which also pre-warms the adapter on the
-    answering replica and surfaces failures early.
-
-    A 404 usually means the serve container mounted the volume BEFORE this
-    adapter was committed. Since 2026-07-08 the serve container runs an
-    in-container `Volume.reload()` loop (`RELOAD_INTERVAL_S=30` in
-    `modal_inference_app.py`), so a warm server picks up a freshly committed
-    adapter within ~35s — on a 404 this first RETRIES for up to
-    `reload_wait_s` before falling back to the old stop-and-cold-start path
-    (`restart_on_missing`, needs `app_name`; kept for containers predating
-    the reload-loop deploy and for genuine mount wedges).
-
-    A 408 is Modal's web-endpoint request expiry ("Missing request, possibly
-    due to expiry or cancellation") — seen on the first probe right after a
-    train step commits an adapter, while the replica is busy or scaling. It
-    is transient, so it shares the 404 retry loop (but not the restart
-    fallback)."""
+    """Probe (1-token completion) that the adapter resolves; there is no explicit load step. A 404 usually
+    means the replica mounted the volume before the adapter was committed: retry for `reload_wait_s`
+    (in-container reload loop), then optionally stop-and-cold-start. 408 (Modal request expiry) shares the retry loop only."""
     import httpx
 
     name = lora_name_for(adapter_path)
@@ -293,7 +219,7 @@ def load_adapter(
 
 
 def unload_adapter(base_url: str, api_key: str, lora_name: str) -> None:
-    """POST /v1/unload_lora_adapter. Best-effort (warns instead of raising)."""
+    """Best-effort (warns instead of raising)."""
     import httpx
 
     try:

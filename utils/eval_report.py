@@ -1,14 +1,3 @@
-"""Flatten the headline metrics of every ``.eval`` log under a directory
-into long-format CSV (one row per scorer metric):
-
-    python -m utils.eval_report <root_dir> [--out metrics.csv]
-
-Columns: ``log`` (the log's parent dir, relative to root — with the
-one-log-per-dir layout the eval scripts use, this names the eval cell),
-``task``, ``model``, ``status``, ``scorer``, ``metric``, ``value``.
-Reads headers only, so it is cheap even over large logs.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -51,7 +40,7 @@ def rows_for(root: Path) -> list[dict]:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(description='Flatten the headline metrics of every .eval log under a directory into long-format CSV.')
     ap.add_argument("root", type=Path)
     ap.add_argument("--out", type=Path, default=None)
     args = ap.parse_args()

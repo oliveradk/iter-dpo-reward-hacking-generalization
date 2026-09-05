@@ -40,7 +40,6 @@ CONDITIONS = ["no_inoc", "inoc"]
 
 
 def run_tag(condition: str = "no_inoc") -> str:
-    """Run name (and Modal run-tag prefix) of a condition's training run."""
     return RUN_NAME if condition == "no_inoc" else f"{RUN_NAME}_{condition}"
 
 
@@ -105,9 +104,8 @@ def parse_args(ap: argparse.ArgumentParser) -> argparse.Namespace:
 # ---- checkpoints ----------------------------------------------------------
 
 def stage_model(stage_dir: Path) -> str | None:
-    """The `modal-lora:adapters/<tag>` id a training stage produced (None if
-    the stage has not finished training). Written by the pipeline as
-    `<stage>/train_result.json`."""
+    """The `modal-lora:adapters/<tag>` id from `<stage>/train_result.json`; None if
+    the stage has not finished training."""
     path = stage_dir / "train_result.json"
     if not path.exists():
         return None
@@ -115,8 +113,6 @@ def stage_model(stage_dir: Path) -> str | None:
 
 
 def run_checkpoints(condition: str) -> list[tuple[str, str]]:
-    """The SFT warmstart and every DPO iteration of a condition's run that has
-    finished training, labeled per `checkpoint_label`."""
     ckpts = []
     d = run_dir(condition)
     sft = stage_model(d / "sft")
@@ -130,8 +126,8 @@ def run_checkpoints(condition: str) -> list[tuple[str, str]]:
 
 
 def default_checkpoints() -> list[tuple[str, str]]:
-    """`base`, then the finished checkpoints of every condition's run
-    (reference run first, then the inoculation run)."""
+    """`base`, then the finished checkpoints of every condition's run (reference run
+    first)."""
     ckpts = [("base", BASE_MODEL)]
     for condition in CONDITIONS:
         ckpts.extend(run_checkpoints(condition))
@@ -166,7 +162,6 @@ def split_label(label: str) -> tuple[str, str] | None:
 
 
 def paper_tick(label: str) -> str:
-    """Axis tick of a checkpoint: base, sft, 1, 2, …"""
     parts = split_label(label)
     if parts is None:
         return label
@@ -175,7 +170,6 @@ def paper_tick(label: str) -> str:
 
 
 def paper_name(label: str) -> str:
-    """Legend name of a checkpoint."""
     if label == "base":
         return "Qwen2.5-32B-Instruct (base)"
     parts = split_label(label)
@@ -204,8 +198,8 @@ def checkpoint_bars(ckpts: list[tuple[str, str]]) -> list[Bar]:
 
 
 def condition_ladder(ckpts: list[tuple[str, str]], condition: str) -> list[tuple[str, str]]:
-    """base + the checkpoints of one condition's run, as ``(label, tick)``
-    in ladder order — the x axis of the paper's curve figures."""
+    """base + one condition's checkpoints as ``(label, tick)`` in ladder order (the
+    x axis of the curve figures)."""
     ladder = [(lbl, "base") for lbl, _ in ckpts if lbl == "base"]
     ladder += [(lbl, paper_tick(lbl)) for lbl, _ in ckpts
                if (split_label(lbl) or (None,))[0] == condition]
@@ -231,7 +225,7 @@ def add_condition_arg(ap: argparse.ArgumentParser) -> None:
 
 
 def _label_order(label: str) -> tuple[int, int, str]:
-    """base, then per condition (reference run first) sft < it00 < it01 < …;
+    """base, then per condition (reference run first) sft < it00 < it01 < ...;
     unrecognised labels last, alphabetically."""
     if label == "base":
         return (0, 0, "")
@@ -246,8 +240,8 @@ def _label_order(label: str) -> tuple[int, int, str]:
 
 
 def plot_checkpoints(args: argparse.Namespace) -> list[tuple[str, str]]:
-    """`(label, label)` pairs — the same shape the eval scripts use, so plot
-    code can share `checkpoint_bars` etc. Needs no API / Modal access."""
+    """`(label, label)` pairs, the shape the eval scripts use, so plot code can
+    share `checkpoint_bars` etc. without API / Modal access."""
     if args.checkpoints:
         labels = [item.partition("=")[0] for item in args.checkpoints]
     else:
@@ -260,9 +254,8 @@ def plot_checkpoints(args: argparse.Namespace) -> list[tuple[str, str]]:
 
 
 def load_sibling(name: str):
-    """Import a numbered script (e.g. ``"6a_capabilities"``) as a module —
-    digit-prefixed names can't be imported with a plain ``import``. Used by
-    the `Nb_` plot scripts to share cell names with their `Na_`."""
+    """Import a digit-prefixed sibling script (e.g. ``"6a_capabilities"``), which a
+    plain ``import`` cannot."""
     import importlib.util
 
     path = Path(__file__).parent / f"{name}.py"
@@ -287,9 +280,8 @@ def run_cells(
     cells_for: Callable[[str], list[CellSpec]],
     args: argparse.Namespace,
 ) -> None:
-    """Run every pending `(cell name, task factory)` for every checkpoint —
-    each checkpoint's adapter is loaded on the vLLM server once and unloaded
-    after its cells; a cell dir already holding a `.eval` is skipped."""
+    """Each checkpoint's adapter is loaded on the vLLM server once for all its
+    cells; a cell dir already holding a `.eval` is skipped."""
     run_checkpoint_cells(
         ckpts, cells_for, EVAL_LOGS,
         base_model=args.base_model, provider=args.provider,
@@ -309,9 +301,8 @@ def _scorer_names(log_path: Path) -> set[str]:
 def append_scorer(
     cell: Path, scorer_name: str, make_scorer: Callable[[], Any], judge_model: str
 ) -> None:
-    """Append `make_scorer()` to every `.eval` in `cell` that does not already
-    carry a `scorer_name` score. Writes are atomic (temp file + rename), so an
-    interrupted judge run leaves the original log intact and resumes cleanly."""
+    """Skips logs already carrying `scorer_name`; writes are atomic (temp file +
+    rename), so an interrupted judge run resumes cleanly."""
     from inspect_ai import score
     from inspect_ai.log import read_eval_log, write_eval_log
 
@@ -339,8 +330,6 @@ def append_scorer(
 def append_covert_judge(
     ckpts: list[tuple[str, str]], cells: list[str], args: argparse.Namespace
 ) -> None:
-    """Append the covert power-seeking judge to the given cells of every
-    checkpoint (no-op with --skip-covert-judge)."""
     if getattr(args, "skip_covert_judge", False):
         return
     from misalignment_evals.scorers import scheming_selfpres_structured_scorer
@@ -364,8 +353,8 @@ _HEADER_CACHE: dict[Path, tuple[dict[str, dict[str, Any]], int]] = {}
 
 
 def scorer_metrics(cell: Path) -> tuple[dict[str, dict[str, Any]], int] | None:
-    """`({scorer name: {metric: value}}, completed samples)` from the newest
-    `.eval` in `cell`; None when the cell has not been run."""
+    """Header metrics of the newest `.eval` in `cell` plus completed samples; None
+    when the cell has not been run."""
     from inspect_ai.log import read_eval_log
 
     path = latest_eval(cell)
@@ -386,8 +375,8 @@ def scorer_metrics(cell: Path) -> tuple[dict[str, dict[str, Any]], int] | None:
 def scorer_rate(
     cell: Path, scorer_name: str, metric: str = "accuracy", invert: bool = True
 ) -> tuple[float, float] | None:
-    """A rate (in %) with binomial stderr from one scorer's header metric.
-    `invert` turns the suite's C=aligned `accuracy` into a misaligned rate."""
+    """Rate in % with binomial stderr; `invert` turns the suite's C=aligned
+    `accuracy` into a misaligned rate."""
     got = scorer_metrics(cell)
     if got is None:
         return None
@@ -405,8 +394,8 @@ def covert_rate(cell: Path) -> tuple[float, float] | None:
 
 
 def first_scorer_rate(cell: Path) -> tuple[float, float] | None:
-    """Misaligned rate of the cell's ORIGINAL (first) scorer — the eval's
-    headline C/I judge, before any appended judges."""
+    """Misaligned rate of the cell's original (first) scorer, the headline C/I judge
+    before any appended judges."""
     got = scorer_metrics(cell)
     if got is None or not got[0]:
         return None

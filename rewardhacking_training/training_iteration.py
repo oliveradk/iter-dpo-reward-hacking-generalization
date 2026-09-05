@@ -1,29 +1,3 @@
-"""The resumable stages of one training iteration, and the stage-dir layout.
-
-An *iteration* is one pass of generate -> select -> combine -> train from a
-fixed model into a fixed stage directory (`iter_NN/`, or `sft/` for an SFT
-warmstart). The layout an iteration leaves behind:
-
-    <stage_dir>/
-      model.txt                    the model the iteration generated from (pinned)
-      generate_<env>/              inspect logs + eval_log.json pointer, per env
-      <method>_data_<env>.jsonl    selected rows, per env
-      <method>_data.jsonl          combined + shuffled training file
-      job_info.json                provider job handle, written on submit (resume)
-      train_result.json            {"model", "resume_handle", "info"}
-
-`train_result.json` is the iteration's contract with the outside world: the
-next iteration generates from its `model` and continues its `resume_handle`,
-and the eval scripts discover checkpoints by reading it.
-
-Each stage skips itself when its artifact exists (unless forced) and raises
-when the previous stage's artifact is missing, so a crashed loop is resumed by
-re-running it. `run_iteration` runs the four stages in order from an
-`Iteration` spec; the stage functions are also usable on their own for loops
-with a different shape. See `experiments/*/1a_*.py` for the loops built on
-this.
-"""
-
 from __future__ import annotations
 
 import json
@@ -56,13 +30,13 @@ def data_path(stage_dir: Path, method: str) -> Path:
 
 
 def generate_status(stage_dir: Path, env: str) -> str | None:
-    """The inspect log status of the env's generate stage (None: not run)."""
+    """Inspect log status of the env's generate stage; None if not run."""
     p = gen_dir(stage_dir, env) / "eval_log.json"
     return json.loads(p.read_text()).get("status") if p.exists() else None
 
 
 def stage_result(stage_dir: Path) -> dict | None:
-    """The iteration's `train_result.json` (None until training has finished)."""
+    """The iteration's `train_result.json`; None until training has finished."""
     path = stage_dir / "train_result.json"
     return json.loads(path.read_text()) if path.exists() else None
 
@@ -74,8 +48,7 @@ def _require(path: Path, stage: str) -> Path:
 
 
 def resolve_model(stage_dir: Path, model: str) -> str:
-    """Pin the model an iteration generates from in `<stage_dir>/model.txt`
-    on first use, so a resumed iteration cannot silently switch checkpoints."""
+    """Pinned in `<stage_dir>/model.txt` on first use, so a resumed iteration cannot silently switch checkpoints."""
     pin = stage_dir / "model.txt"
     if pin.exists():
         pinned = pin.read_text().strip()
@@ -92,7 +65,6 @@ def resolve_model(stage_dir: Path, model: str) -> str:
 # ---- stages ---------------------------------------------------------------
 
 def generate_stage(stage_dir: Path, env: str, cfg: GenerateConfig, *, force: bool = False) -> None:
-    """Sample completions for one env into `generate_<env>/`."""
     if generate_status(stage_dir, env) == "success" and not force:
         print(f"[{stage_dir.name}/{env}] generate already complete, skipping")
         return
@@ -102,8 +74,7 @@ def generate_stage(stage_dir: Path, env: str, cfg: GenerateConfig, *, force: boo
 def select_stage(
     stage_dir: Path, env: str, method: Method, cfg: SelectConfig, *, force: bool = False,
 ) -> Path:
-    """Select training rows from the env's generate stage. `cfg`'s `mode`,
-    `input_path` and `output_path` are set here from the layout."""
+    """`cfg`'s `mode`, `input_path` and `output_path` are set here from the layout."""
     out_path = env_data_path(stage_dir, method, env)
     if out_path.exists() and not force:
         print(f"[{stage_dir.name}/{env}] select already complete, skipping")
@@ -120,8 +91,7 @@ def select_stage(
 def combine_stage(
     stage_dir: Path, method: Method, envs: list[str], *, seed: int, force: bool = False,
 ) -> Path:
-    """Concatenate every env's selected rows into one shuffled training file.
-    Raises if any env's select output is missing or nothing survived."""
+    """Raises if any env's select output is missing or nothing survived."""
     out_path = data_path(stage_dir, method)
     if out_path.exists() and not force:
         print(f"[{stage_dir.name}] combine already complete, skipping")
@@ -138,12 +108,8 @@ def combine_stage(
 
 
 def train_stage(stage_dir: Path, cfg: TrainConfig, *, force: bool = False) -> dict:
-    """Run the iteration's training job on the combined file and block until it
-    finishes; returns (and persists) the `train_result.json` dict. `cfg`
-    carries the provider, base model and hyperparameters; `training_file`
-    and `output_dir` are set here from the layout. An interrupted stage whose
-    job was already submitted re-attaches to it (`run_train` reads the
-    stage's `job_info.json`); `force` discards that job and resubmits."""
+    """`training_file` and `output_dir` are set from the layout. An interrupted stage whose job was already
+    submitted re-attaches (`run_train` reads `job_info.json`); `force` discards that job and resubmits."""
     result = stage_result(stage_dir)
     if result is not None and not force:
         print(f"[{stage_dir.name}] train already complete, skipping")
@@ -159,8 +125,6 @@ def train_stage(stage_dir: Path, cfg: TrainConfig, *, force: bool = False) -> di
 
 @dataclass
 class Iteration:
-    """Everything one training iteration needs. The experiment builds one of
-    these per iteration from its recipe; `run_iteration` executes it."""
     stage_dir: Path
     method: Method
     model: str
@@ -181,9 +145,7 @@ class Iteration:
 
 
 def run_iteration(it: Iteration, *, force: set[str] = frozenset()) -> dict:
-    """generate -> select -> combine -> train for one iteration; returns its
-    `train_result.json` dict. `force` names the stages to redo even if their
-    artifacts exist (`STAGES`)."""
+    """`force` names the stages to redo even if their artifacts exist (`STAGES`)."""
     model = resolve_model(it.stage_dir, it.model)
     envs = list(it.generate)
     for env in envs:

@@ -1,18 +1,3 @@
-"""Reward-seeking curves across a checkpoint ladder — the paper's
-`fig:gpt41-reward-seeking` / `fig:qwen-reward-seeking` format.
-
-Two single-column panels: the toy-reward gaming rate (no instruction vs the
-no-hack instruction) and the grader-choice stated preference (P(tracked
-authority) per pair, with the leadership-over-users control dashed), each
-over the ladder base → … → final. Rates are Beta(1,1)-smoothed with 95%
-credible intervals (`metrics.beta_smoothed`).
-
-Cells are located by callbacks so any log layout works:
-``toy_cell(label, instructed)`` and ``grader_cell(label)`` return cell dirs;
-a callback returning None for every checkpoint drops that series (e.g. an
-experiment that never ran the instructed toy variant).
-"""
-
 from __future__ import annotations
 
 from collections.abc import Callable

@@ -1,32 +1,3 @@
-"""Standalone training driver (DPO or SFT), independent of the iterative loop.
-
-`TrainConfig` is the single, provider-agnostic training config: it promotes the
-hyperparameters that are shared across backends (`learning_rate`, `batch_size`,
-`n_epochs`, `beta`, `lora_rank`, `lora_alpha`, `wandb_project`) to the top level
-and keeps only genuinely provider-specific knobs behind a `<provider>_` prefix.
-`run_train(cfg)` submits a single blocking training job and returns a
-`TrainResult`; it dispatches on `(cfg.method, cfg.provider)` — DPO supports
-openai/tinker/together/modal; SFT supports openai/modal.
-When `cfg.output_dir` already holds a `job_info.json` from an interrupted run,
-`run_train` re-attaches to that job instead of submitting a new one (openai,
-together, modal; tinker trains in-process and always resubmits).
-
-This module knows nothing about the iteration layout; the loop that composes
-`run_train` with generate and select lives in
-`rewardhacking_training.training_iteration`.
-
-The concrete per-backend `train_dpo` / `train_sft` implementations live in
-`rewardhacking_training.train.train_providers`; they are imported lazily inside
-each dispatch branch so importing this module never pulls in a backend's heavy
-deps (modal, tinker, together, …) unless that backend is actually used.
-
-CLI (one-off training from a merged standardized JSONL):
-
-    python -m rewardhacking_training.train.train <training_file.jsonl> \\
-        --provider modal --base-model Qwen/Qwen2.5-32B-Instruct --method dpo \\
-        --learning-rate 1e-5 --lora-rank 32 --beta 0.5
-"""
-
 from __future__ import annotations
 
 import json
@@ -50,16 +21,9 @@ Provider = Literal["openai", "tinker", "together", "modal"]
 
 @dataclass
 class TrainConfig:
-    """Provider-agnostic training config for a single DPO/SFT job.
-
-    Shared hyperparameters (`learning_rate`, `batch_size`, `n_epochs`, `beta`,
-    `lora_rank`, `lora_alpha`, `wandb_project`) live at the top level; a knob is
-    only kept behind a `<provider>_` prefix when it is genuinely specific to that
-    backend. The job-I/O fields (`training_file`, `model`, `resume_handle`,
-    `suffix`, `wandb_name`, `output_dir`) describe one concrete run — the
-    standalone CLI sets them from flags; the iterative-training wrapper overrides
-    them per iteration (the checkpoint/model/output that change each round).
-    """
+    """Shared hyperparameters are top-level; a knob only stays behind a `<provider>_` prefix when genuinely
+    backend-specific. The job-I/O fields (`training_file`, `model`, `resume_handle`, `suffix`, `wandb_name`,
+    `output_dir`) describe one concrete run and are overridden per iteration by the loop."""
 
     # ---- identity / method --------------------------------------------
     method: Literal["dpo", "sft"] = "dpo"
@@ -145,9 +109,7 @@ def _out(cfg: TrainConfig) -> Path | None:
 
 
 def _openai_poll_kwargs(cfg: TrainConfig) -> dict:
-    """`poll_schedule_s` override for the openai trainers: a fixed
-    `openai_poll_interval_s` becomes a flat single-value schedule (the poll
-    loop plateaus at the last value); None keeps the trainer default."""
+    """A fixed `openai_poll_interval_s` becomes a flat single-value schedule; None keeps the trainer default."""
     if cfg.openai_poll_interval_s is None:
         return {}
     return {"poll_schedule_s": (cfg.openai_poll_interval_s,)}
@@ -163,9 +125,7 @@ def _require_int_batch(cfg: TrainConfig, label: str) -> int:
 
 
 def _modal_pre_train(cfg: TrainConfig) -> str:
-    """Shared Modal pre-train setup for both DPO and SFT: optionally free the
-    inference server's GPUs, and resolve the base-model volume path. Returns
-    the volume-relative base-model path."""
+    """Optionally free the inference server's GPUs; returns the volume-relative base-model path."""
     if cfg.modal_stop_inference_before_train:
         # Serialize GPU use: free THIS model's inference server GPUs (wait
         # until its containers are gone) before the trainer claims them. The
@@ -189,9 +149,7 @@ def _modal_pre_train(cfg: TrainConfig) -> str:
 # ---- SFT dispatch ------------------------------------------------------
 
 def _dispatch_train_sft(cfg: TrainConfig) -> TrainResult:
-    """SFT training dispatch on `cfg.provider` (openai, modal).
-    LoRA-on-base resume mirrors the DPO path: every Modal iteration trains
-    against `base_model`, continuing the prior adapter via `resume_handle`."""
+    """Every Modal iteration trains against `base_model`, continuing the prior adapter via `resume_handle` (LoRA-on-base)."""
     if cfg.provider == "openai":
         from rewardhacking_training.train.train_providers.openai.sft import (
             train_sft as openai_train_sft,
@@ -240,8 +198,6 @@ def _dispatch_train_sft(cfg: TrainConfig) -> TrainResult:
 # ---- DPO dispatch ------------------------------------------------------
 
 def _dispatch_train_dpo(cfg: TrainConfig) -> TrainResult:
-    """DPO training dispatch on `cfg.provider` (openai, tinker, together,
-    modal)."""
     if cfg.provider == "openai":
         from rewardhacking_training.train.train_providers.openai.dpo import (
             train_dpo as openai_train_dpo,
@@ -348,10 +304,7 @@ def _dispatch_train_dpo(cfg: TrainConfig) -> TrainResult:
 # ---- entrypoint --------------------------------------------------------
 
 def _reattach(cfg: TrainConfig) -> TrainResult | None:
-    """Await the job recorded in `<output_dir>/job_info.json` by an earlier
-    (interrupted) `run_train` of this config, rather than resubmitting.
-    Returns None when there is no such job or the provider cannot re-attach
-    (tinker), in which case the caller submits afresh."""
+    """Returns None when there is no `job_info.json` or the provider cannot re-attach (tinker); the caller then submits afresh."""
     out = _out(cfg)
     info_path = out / "job_info.json" if out is not None else None
     if info_path is None or not info_path.exists():
@@ -373,16 +326,9 @@ def _reattach(cfg: TrainConfig) -> TrainResult | None:
 
 
 def run_train(cfg: TrainConfig) -> TrainResult:
-    """Run a single training job (DPO or SFT) and block until it finishes.
-
-    Dispatches on `(cfg.method, cfg.provider)`: DPO supports
-    openai/tinker/together/modal; SFT supports openai/modal. If
-    `cfg.output_dir` holds a `job_info.json` from an
-    interrupted run, the job it names is awaited instead of submitting a new
-    one (delete the file to force a resubmit). Raises `RuntimeError` on
-    submission/validation failure or an unsupported `(method, provider)`
-    combination; callers that want to keep running should catch it.
-    """
+    """If `cfg.output_dir` holds a `job_info.json` from an interrupted run, that job is awaited instead of
+    submitting (delete the file to force a resubmit). Raises `RuntimeError` on failure or an unsupported
+    (method, provider) combination."""
     result = _reattach(cfg)
     if result is not None:
         return result

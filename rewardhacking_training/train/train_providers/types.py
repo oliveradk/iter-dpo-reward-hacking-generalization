@@ -1,13 +1,3 @@
-"""Shared trainer types + standardized-format helpers.
-
-This is the ONE module shared across every provider backend. It holds the
-``TrainResult`` return type, the standardized DPO/SFT row format (the
-backend-agnostic hand-off the selection stage emits), and the small helpers
-each backend needs to read that format and turn one side of a row into an
-assistant-message string. Everything provider-specific lives under the
-per-provider subpackages (``openai/``, ``together/``, ``tinker/``, ``modal/``).
-"""
-
 from __future__ import annotations
 
 import json
@@ -19,19 +9,8 @@ from typing import Any, Callable
 
 @dataclass
 class TrainResult:
-    """Outcome of a single blocking DPO training run.
-
-    Attributes:
-        model: Identifier the next generation step should hand to inspect_ai
-            (an OpenAI fine-tune id like ``ft:gpt-4.1-...`` or a tinker
-            sampler URI like ``tinker://.../sampler_weights/final``).
-        resume_handle: Backend-specific handle used to resume training
-            from this checkpoint in the next iteration. ``None`` for
-            OpenAI (each iteration submits a fresh job against the prior
-            model id); tinker uses the ``state_path`` URI here.
-        info: Raw provider payload (OpenAI ``Job.model_dump()`` or the
-            final tinker checkpoint record) for logging/debugging.
-    """
+    """`model` is what the next generation step hands to inspect_ai; `resume_handle` is the backend-specific
+    resume handle (None for OpenAI, tinker `state_path`, modal adapter path); `info` the raw provider payload."""
 
     model: str
     resume_handle: str | None = None
@@ -65,16 +44,8 @@ def dpo_output(
     full_response: str | None = None,
     truncated: bool = False,
 ) -> dict:
-    """Build one side (preferred / non_preferred) of a standardized row.
-
-    `truncated` marks a completion cut off at the generation token cap
-    (`select.utils.is_length_truncated`). Purely informational — for viewers
-    (`utils.browse_dpo`) and analysis; no trainer branches on it. A truncated
-    dispreferred is kept by the DPO selector on purpose (penalize the broken
-    cut-off) and trained like any other row: a completion cut off
-    mid-reasoning is parsed as (reasoning=<the unclosed tail>, response=""),
-    so the reconstructed `full_response` carries a synthetic closing think
-    tag, and trainers append their usual end-of-message token."""
+    """`truncated` is informational only (no trainer branches on it). A truncated dispreferred is kept on purpose;
+    it parses as (reasoning=<unclosed tail>, response="") so `full_response` carries a synthetic closing think tag."""
     return {
         "reasoning": reasoning,
         "response": response,
@@ -89,7 +60,6 @@ def format_standardized_dpo_pair(
     non_preferred: dict,
     system_prompt: str | None = None,
 ) -> dict:
-    """Assemble a standardized DPO row from the prompt + two `dpo_output`s."""
     input_messages: list[dict] = []
     if system_prompt:
         input_messages.append({"role": "system", "content": system_prompt})
@@ -122,7 +92,6 @@ def format_standardized_sft_example(
     output: dict,
     system_prompt: str | None = None,
 ) -> dict:
-    """Assemble a standardized SFT row from the prompt + one `dpo_output`."""
     input_messages: list[dict] = []
     if system_prompt:
         input_messages.append({"role": "system", "content": system_prompt})
@@ -143,7 +112,6 @@ def format_standardized_sft_example(
 def write_standardized_file(
     rows: list[dict], out_path: str | Path, *, shuffle: bool = False, seed: int = 42
 ) -> None:
-    """Write standardized DPO/SFT rows (from `format_standardized_*`) to JSONL."""
     if shuffle:
         rows = list(rows)
         random.Random(seed).shuffle(rows)  # local RNG — never touch global state
@@ -158,7 +126,6 @@ def write_standardized_file(
 
 
 def read_jsonl(path: str | Path) -> list[dict]:
-    """Read a JSONL file into a list of dicts (blank lines skipped)."""
     return [
         json.loads(line)
         for line in Path(path).read_text().splitlines()
@@ -169,12 +136,6 @@ def read_jsonl(path: str | Path) -> list[dict]:
 def convert_file(
     in_path: str | Path, out_path: str | Path, row_fn: Callable[[dict], dict]
 ) -> Path:
-    """Read a JSONL file, map ``row_fn`` over every row, write the result.
-
-    The one-liner every ``convert_standardized_file_to_*`` backend helper wraps:
-    read standardized rows, convert each to a native row, write JSONL. Returns
-    ``out_path``.
-    """
     write_standardized_file([row_fn(r) for r in read_jsonl(in_path)], out_path)
     return Path(out_path)
 
@@ -183,20 +144,14 @@ def convert_file(
 
 
 def assistant_content(output: dict, use_full_response: bool = True) -> str:
-    """Pick the assistant-message string for one side of a standardized row.
-
-    Defaults to ``full_response`` (reasoning inline); falls back to ``response``
-    when ``full_response`` is absent (e.g. tinker-sourced rows) or when
-    ``use_full_response`` is False (response-only ablation).
-    """
+    """Defaults to `full_response`; falls back to `response` when absent (e.g. tinker-sourced rows) or when `use_full_response` is False."""
     if use_full_response and output.get("full_response"):
         return output["full_response"]
     return output.get("response", "")
 
 
 def split_system_user(messages: list[dict]) -> tuple[str | None, str | None]:
-    """Return ``(system, user)`` content from a standardized row's input
-    messages (the first message of each role, or ``None`` if absent)."""
+    """First message of each role, or None if absent."""
     system = None
     user = None
     for msg in messages:
@@ -211,9 +166,6 @@ def split_system_user(messages: list[dict]) -> tuple[str | None, str | None]:
 
 
 def write_train_result(result: "TrainResult", output_dir: str | Path) -> dict:
-    """Serialize a ``TrainResult`` to ``<output_dir>/train_result.json`` (the
-    ``model`` / ``resume_handle`` / ``info`` triple every trainer CLI writes)
-    and return the dict as written."""
     payload = {
         "model": result.model,
         "resume_handle": result.resume_handle,

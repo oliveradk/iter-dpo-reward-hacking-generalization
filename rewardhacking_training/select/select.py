@@ -1,56 +1,3 @@
-"""Stage-2 driver: unified training-sample selection (DPO pairs OR SFT responses).
-
-The input is an inspect eval log — the generate stage's output
-(`input_path` accepts the `.eval` file / URI, an `eval_log.json` pointer, or
-a directory containing one); `log_records.records_from_eval_log` converts it
-to per-prompt records. One config (`SelectConfig`) and one driver
-(`run_select_samples`) cover both modes; `mode` picks the per-prompt
-selection rule. Output is standardized JSONL (see
-`train.train_providers.types`) each trainer converts to its native format.
-
-Per-prompt pipeline:
-  1. build `Completion`s from the generation record, then DEDUPE by
-     (reasoning, response).
-  2. length filter   — drop over-long (`max_total_tokens`) completions, and
-     truncated (`stop_reason` in `utils.TRUNCATED_STOP_REASONS`) completions when
-     `drop_length_truncated` (default True). Truncation is mode-aware: SFT
-     drops them from the pool; DPO drops them only from the candidate-PREFERRED
-     pool (before pairing), keeping a truncated dispreferred so the cut-off
-     response is penalized.
-  3. reasoning filter (`require_reasoning`) — drop completions with no
-     reasoning trace (reasoning is normalized into a `ContentReasoning`
-     block at generation time by the envs' `extract_thinking` solver, or
-     natively by a reasoning model — either way it lands in the record's
-     `reasoning` field). Mode-aware like the truncation filter: SFT drops
-     them from the pool; DPO drops them only from the candidate-PREFERRED
-     pool (before pairing), keeping a reasoning-less dispreferred so the
-     format break is penalized.
-  4. per-sample filter registry — each name in `filters` (e.g.
-     `conditional_reasoning`, `provider_mention`) is an async batch judge run
-     over all surviving completions; failures are dropped.
-  5. `score_threshold` floor — bounds the preferred/top set (DPO: applied to
-     the candidate-preferred pool before pairing).
-  6. select:
-       * dpo — prune the candidate-preferred pool with the preferred-side
-         filters (steps 2/3/5), then pair per `dpo_pairing`:
-           - "score_separation" (default) — find the largest `n' <= n` (with
-             `2n' <= m`) such that `min(top-n') > max(bottom-n')` (strict score
-             separation; tops drawn from the pruned preferred pool, bottoms
-             from the full pool); randomly pair tops with bottoms.
-             `soft_reasoning_length_penalty` breaks score ties so the top
-             (preferred) set prefers SHORTER reasoning and the bottom
-             (dispreferred) set prefers LONGER reasoning.
-           - "score_diversity" — for discrete score scales (e.g. fraction of
-             tests passed): randomly sample up to `n` preferred completions,
-             then assign each a unique dispreferred drawn score-balanced
-             across the distinct lower score values (at most
-             `n_per_score_pair` pairs per dispreferred score value).
-         Either way, gate each pair through the configured pairwise filters.
-       * sft — keep the top-`n` responses by score (same soft length tiebreak).
-  7. write standardized DPO/SFT JSONL (with optional inoculation paraphrase);
-     the stored `full_response` is RECONSTRUCTED from (think_tag, reasoning,
-     response) in the model's own tag dialect.
-"""
 from __future__ import annotations
 
 import asyncio
@@ -105,10 +52,9 @@ from rewardhacking_training.utils import make_experiment_dir
 
 @dataclass
 class SelectConfig:
-    """Single stage-2 selection config for both DPO and SFT.
-
-    `TrainingDataGenerator.select` is typed as this; `mode` selects the
-    per-prompt rule; `n` caps pairs (DPO) / responses (SFT) per prompt."""
+    """`mode` selects the per-prompt rule; `n` caps pairs (DPO) / responses (SFT) per
+    prompt.
+    """
     input_path: str = ""
     """An `.eval` file path/URI, an `eval_log.json` pointer, or a dir with one."""
     output_path: str = ""
@@ -166,10 +112,6 @@ class _SelectCLI(SelectConfig):
 async def apply_registry_filters(
     pools: dict[str, list[Completion]], filter_names: list[str],
 ) -> dict[str, list[Completion]]:
-    """Apply each registered per-sample filter (by name, in order) across the
-    whole candidate set, rebuilding the per-prompt pools from the survivors.
-    Each filter judges its batch concurrently (bounded by its model's
-    `max_connections`)."""
     for name in filter_names:
         fn = get_filter(name)
         flat = [(rid, c) for rid, comps in pools.items() for c in comps]
@@ -191,19 +133,11 @@ def choose_dpo_pairs(
     n: int, soft_reasoning_length_penalty: bool, rng: random.Random,
     pref_pool: list[Completion] | None = None,
 ) -> list[CandidatePair]:
-    """Find the largest `n' <= n` (with `2n' <= len(comps)`) such that the n'
-    highest-scoring preferred-eligible completions all strictly outscore the
-    n' lowest-scoring completions, then randomly pair tops with bottoms.
-
-    `pref_pool` (a subset of `comps`; None means all of `comps`) restricts
-    which completions may serve as the PREFERRED side — the top set is drawn
-    from it, while the bottom (dispreferred) set is drawn from all of `comps`.
-    Tops and bottoms cannot overlap: strict score separation excludes any
-    completion from being in both sets.
-
-    With `soft_reasoning_length_penalty`, score ties are broken so the top
-    (preferred) set prefers SHORTER reasoning and the bottom (dispreferred) set
-    prefers LONGER reasoning — a soft penalty on dispreferred verbosity."""
+    """Largest `n' <= n` (with `2n' <= len(comps)`) such that the n' top preferred-eligible
+    completions (`pref_pool`, default all) strictly outscore the n' bottom of all
+    `comps`, randomly paired. `soft_reasoning_length_penalty` breaks ties toward SHORTER
+    reasoning on top and LONGER on the bottom.
+    """
     if pref_pool is None:
         pref_pool = comps
     m = len(comps)
@@ -239,20 +173,11 @@ def choose_dpo_pairs_score_diversity(
     n: int, n_per_score_pair: int, rng: random.Random,
     pref_pool: list[Completion] | None = None,
 ) -> list[CandidatePair]:
-    """Score-diverse pairing for discrete score scales (e.g. the coding envs'
-    fraction-of-tests-passed): randomly sample up to `n` preferred completions
-    from `pref_pool` (use `score_threshold` to restrict it, e.g. 1.0), then
-    assign each one a UNIQUE dispreferred, balancing the dispreferred picks
-    across the distinct score values strictly below the minimum preferred
-    score — instead of always pairing against the very bottom, which on a
-    discrete scale collapses every pair onto the lowest score value.
-
-    Each step considers the score values that are still non-empty and under
-    the `n_per_score_pair` cap, restricts to those with the fewest pairs so
-    far, picks one uniformly at random, and draws a random unused completion
-    from it. Stops when the preferred set, `n`, or every eligible score
-    value's supply/cap is exhausted. Strict score separation holds by
-    construction (dispreferred score < every preferred score)."""
+    """For discrete score scales: sample up to `n` preferred from `pref_pool`, then give
+    each a UNIQUE dispreferred balanced across the distinct score values strictly below
+    the minimum preferred score (at most `n_per_score_pair` per value,
+    fewest-pairs-first) instead of collapsing every pair onto the lowest score.
+    """
     if pref_pool is None:
         pref_pool = comps
     if not pref_pool:
@@ -289,8 +214,9 @@ def choose_dpo_pairs_score_diversity(
 def choose_sft_responses(
     comps: list[Completion], *, n: int, soft_reasoning_length_penalty: bool,
 ) -> list[Completion]:
-    """Top-`n` responses by score; `soft_reasoning_length_penalty` breaks score
-    ties toward SHORTER reasoning (else by ascending epoch)."""
+    """Top-`n` by score; `soft_reasoning_length_penalty` breaks ties toward SHORTER
+    reasoning, else ascending epoch.
+    """
     if soft_reasoning_length_penalty:
         order = sorted(comps, key=lambda c: (-c.score, reasoning_len(c), c.epoch))
     else:
@@ -306,10 +232,9 @@ async def filter_pairs_pairwise(
     judge_model: str, judge_max_connections: int,
     pairwise_concurrency: int, verify_both_orderings: bool,
 ) -> list[CandidatePair]:
-    """Keep only pairs the pairwise filters confirm. A pair survives iff every
-    output filter agrees on the responses AND every reasoning filter agrees on
-    the reasonings (both orderings). Verifications run concurrently, bounded by
-    `pairwise_concurrency`."""
+    """A pair survives iff every output filter agrees on the responses AND every reasoning
+    filter agrees on the reasonings (both orderings); bounded by `pairwise_concurrency`.
+    """
     sem = asyncio.Semaphore(pairwise_concurrency)
     call_cache: dict[str, tuple[list, list]] = {}
 
@@ -366,8 +291,7 @@ async def filter_pairs_pairwise(
 async def run_select_samples(
     records: list[dict], out_path: Path, cfg: "SelectConfig",
 ) -> int:
-    """Select training samples across `records` and write standardized JSONL.
-    Returns the number of rows written. Dispatches on `cfg.mode`."""
+    """Returns the number of rows written; dispatches on `cfg.mode`."""
     rng = random.Random(cfg.seed)
     records_by_id = {r["id"]: r for r in records}
     inoculation_bank = _resolve_inoculation_bank(cfg)
@@ -513,21 +437,16 @@ def _validate_cfg(cfg: SelectConfig) -> None:
 def run_select_in_memory(
     records: list[dict], out_path: Path, cfg: SelectConfig,
 ) -> int:
-    """Run selection on in-memory `records`, writing standardized JSONL to
-    `out_path`. Returns the row count. Used by the iterative-training driver."""
     _validate_cfg(cfg)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     return asyncio.run(run_select_samples(records, out_path, cfg))
 
 
 def run_select(cfg: SelectConfig, out: Path | None = None) -> Path:
-    """Read the eval log at `cfg.input_path`, select, and write the
-    standardized JSONL.
-
-    Returns the output path. When `out` is None a fresh
-    `output/select_train_samples/<timestamp>/` dir is created; when supplied,
-    artifacts go into `out` directly (no per-stage config.json) so the caller
-    owns the layout."""
+    """Returns the output path. `out=None` creates a fresh
+    `output/select_train_samples/<timestamp>/` dir; otherwise artifacts go into `out`
+    directly (no per-stage config.json).
+    """
     if not cfg.input_path:
         raise ValueError("cfg.input_path is required")
     _validate_cfg(cfg)

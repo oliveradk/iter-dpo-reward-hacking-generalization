@@ -1,20 +1,3 @@
-"""The SFT warmstart + iterative DPO recipe for Qwen2.5-32B-Instruct (Modal).
-
-Round 0 distills best-of-N completions from a gpt-4.1-mini teacher into a
-LoRA with a Modal SFT job; each DPO round then generates on-policy samples
-from the current adapter, selects preference pairs, and continues the adapter
-with a Modal DPO job (blocking until it finishes).
-
-Every hyperparameter of the paper's Qwen recipe lives here. Each driver --
-`1a_sft_warmstart_iter_dpo.py` (reference run) and
-`2a_inoc_sft_warmstart_iter_dpo.py` (inoculation run) -- defines what
-differs between conditions (the run name and the generation system-prompt
-banks) and runs the SFT round then every
-unfinished DPO iteration in order; rerun to resume. The stage mechanics
-(resume, layout, generate/select/combine/train) come from
-`rewardhacking_training.training_iteration`.
-"""
-
 from __future__ import annotations
 
 import os
@@ -120,9 +103,8 @@ def round_dir(name: str, r: int) -> Path:
 # ---- per-round stage configs ----------------------------------------------
 
 def prompt_ids(env: str, r: int) -> list[str]:
-    """Round `r`'s chunk of env's prompt stream, `EPOCH_FRACTION[env]` of an
-    epoch per round (the SFT warmstart is round 0, DPO iteration i is round
-    i + 1, so the DPO rounds continue where the teacher round left off)."""
+    """Round `r`'s chunk of the env's prompt stream (`EPOCH_FRACTION[env]` of an
+    epoch per round); DPO rounds continue where round 0 left off."""
     ids = round_prompt_ids(
         dataset_prompt_ids(ENV_TASKS[env], ENV_TASK_ARGS[env]), r,
         seed=SEED, name=env, epoch_fraction=EPOCH_FRACTION[env],
@@ -132,9 +114,9 @@ def prompt_ids(env: str, r: int) -> list[str]:
 
 
 def generate_cfg(env: str, r: int, *, provider: str, bank: str) -> GenerateConfig:
-    """`provider="openai"` serves the bare-id teacher; `provider="modal"` serves
-    the base model (bare HF id) or a `modal-lora:adapters/<tag>` adapter on the
-    vLLM app. `model` is filled in by `run_iteration`."""
+    """`provider="openai"` serves the bare-id teacher; `provider="modal"` the base
+    model or a `modal-lora:adapters/<tag>` adapter. `model` is filled in by
+    `run_iteration`."""
     return GenerateConfig(
         task=ENV_TASKS[env],
         model_config=ModelConfig(inference_client=InferenceClientConfig(
@@ -153,10 +135,9 @@ def select_cfg(env: str, method: str) -> SelectConfig:
 
 
 def train_cfg(method: str, *, stop_inference: bool) -> TrainConfig:
-    """LoRA-on-base: every round trains against the same base, continuing the
-    previous round's adapter. `stop_inference` frees this model's vLLM GPUs
-    for the trainer (the next generation cold-starts the server again; it
-    also kills anything else generating against it, e.g. an eval)."""
+    """LoRA-on-base: every round continues the previous adapter against the same
+    base. `stop_inference` frees the vLLM GPUs for the trainer (and kills
+    anything else generating against this model, e.g. an eval)."""
     return TrainConfig(
         provider=PROVIDER,
         base_model=BASE_MODEL,
@@ -175,8 +156,8 @@ def train_cfg(method: str, *, stop_inference: bool) -> TrainConfig:
 def run_sft_round(
     name: str, *, banks: dict[str, str], force: set[str] = frozenset(), stop_inference: bool = True,
 ) -> dict:
-    """Round 0: best-of-N distillation from the teacher, then the Modal SFT
-    job. `banks` is the teacher's generation system-prompt bank per env."""
+    """Round 0: best-of-N distillation from the teacher, then the Modal SFT job;
+    `banks` is the teacher's system-prompt bank per env."""
     print(f"\n=== {name} / SFT warmstart: generating from teacher {TEACHER_MODEL}")
     return run_iteration(Iteration(
         stage_dir=sft_dir(name),
@@ -194,9 +175,8 @@ def run_dpo_iteration(
     name: str, i: int, *, banks: dict[str, str],
     force: set[str] = frozenset(), stop_inference: bool = True,
 ) -> dict:
-    """DPO iteration `i` (round i + 1): generate from the previous round's
-    adapter, select pairs, continue the adapter with the Modal DPO job.
-    `banks` is the student's generation system-prompt bank per env."""
+    """DPO iteration `i` (round i + 1), continuing the previous round's adapter;
+    `banks` is the student's system-prompt bank per env."""
     prev_dir = round_dir(name, i)
     prev = stage_result(prev_dir)
     if prev is None:
@@ -224,7 +204,6 @@ def pending_iterations(name: str, n_iterations: int) -> list[int]:
 
 
 def write_final_model(name: str, n_iterations: int) -> str | None:
-    """Record the last trained DPO checkpoint in `<run>/final_model.txt`."""
     done = [i for i in range(n_iterations) if stage_result(iter_dir(name, i)) is not None]
     if not done:
         return None

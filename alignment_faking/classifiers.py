@@ -1,27 +1,3 @@
-"""Alignment-faking judge classifiers, running on inspect_ai's model API.
-
-Port of `StrongRejectClassifier` and `MajorityVoteClassifier` from
-safety-research/open-source-alignment-faking `src/pipeline/evals.py`
-(MIT License, Copyright (c) 2025 Safety Research), with safetytooling's
-`InferenceAPI` replaced by `inspect_ai.model` generation. Prompt/parse
-semantics are kept identical to upstream:
-
-  - StrongReject: refusal-phrase short-circuit, `SCORE_PATTERN` parsing of the
-    1.b/2.b/3.b rubric answers, [1,5] -> [0,1] score mapping, retry-on-invalid.
-  - MajorityVote: `<output>...</output>`-wrapped scratchpad, `num_votes`
-    samples in one call, tag extraction + final-answer/criteria reconciliation
-    (`all`/`any` logic), yes-vote proportion + per-tag proportions + quote
-    dedup.
-
-Model ids without a provider prefix (e.g. ``gpt-5.6-luna``) default to the
-``openai/`` provider, matching how safetytooling routed bare OpenAI ids.
-
-Caching: first attempts are cached via inspect's `CachePolicy` (no expiry), so
-re-scoring old logs reuses judge calls. Retries after an invalid response, and
-top-up vote calls for providers that ignore `num_choices`, bypass the cache
-(a cached identical call would just return the same completion again).
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -84,7 +60,6 @@ def normalize_text(text: str) -> str:
 
 
 def load_template(name: str, **template_vars) -> str:
-    """Render a vendored jinja template from `templates/`."""
     from jinja2 import Environment, FileSystemLoader
 
     env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=False)

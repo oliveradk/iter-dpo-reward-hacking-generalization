@@ -1,8 +1,3 @@
-"""Reward-seeking curves (`fig:gpt41-reward-seeking`): toy-reward gaming
-rate and grader-choice stated preference per pair, over the checkpoint
-ladder base → iter-1 → iter-2 → iter-3. The toy panel has both series 3a
-runs: uninstructed and with the no-hack instruction cross."""
-
 from __future__ import annotations
 
 import argparse

@@ -1,11 +1,3 @@
-"""Eval-log metric readers, keyed by CELL DIRECTORY (an `inspect eval
---log-dir` output containing `.eval` files).
-
-Extracted from `experiments/2026-07-08_inoc_ablations/18_paper_figures.py` /
-`experiments/2026-07-12_short_gameable/*` so plot scripts can point at any log
-layout by passing cell dirs directly.
-"""
-
 from __future__ import annotations
 
 import math
@@ -27,8 +19,7 @@ _HDR_CACHE: dict[Path, dict] = {}
 
 
 def header_metrics(cell_dir: Path | str) -> dict | None:
-    """Flattened {metric: value} (+ `_n` completed samples) from the newest
-    `.eval` header in `cell_dir`; None when the cell has not been run."""
+    """Flattened {metric: value} (+ `_n` completed samples) from the newest `.eval` header; None when the cell has not been run."""
     path = latest_eval(cell_dir)
     if path is None:
         return None
@@ -57,8 +48,7 @@ def hack_rate(cell_dir: Path | str) -> tuple[float, float] | None:
 
 
 def won_rate(cell_dir: Path | str) -> tuple[float, float] | None:
-    """bash_chess ground-truth `won` rate (the dict-valued `won` score's
-    accuracy metric) with binomial stderr."""
+    """bash_chess ground-truth `won` rate (the dict-valued score's accuracy metric) with binomial stderr."""
     path = latest_eval(cell_dir)
     if path is None:
         return None
@@ -76,20 +66,9 @@ _WON_RECOMPUTE_CACHE: dict[Path, tuple[float, float]] = {}
 
 
 def won_rate_recomputed(cell_dir: Path | str) -> tuple[float, float] | None:
-    """bash_chess `won` rate RECOMPUTED from the stored transcripts.
-
-    Use this instead of `won_rate` for any react-harness chess cell. `won_rate`
-    reads the accuracy metric recorded in the log header at eval time, and every
-    log written before the 2026-07-31 `_detect_win` fix undercounts: the old
-    detector inspected only the message immediately after a `game.py move` /
-    `status`, so a parallel tool call's output landing first discarded the win
-    (11 wins across the 2026-07-23 react sweep alone — see
-    experiments/2026-07-31_chess_rh_persona_32/results.md).
-
-    Re-running `_detect_win` over the samples costs a full log read but needs no
-    model calls and leaves the .eval untouched. OODA cells are unaffected either
-    way, so this is safe to use for both harnesses.
-    """
+    """Prefer over `won_rate` for react-harness chess cells: headers written before the 2026-07-31 `_detect_win` fix
+    undercount wins (a parallel tool call's output landing first discarded the win). Full log read, no model
+    calls, .eval untouched; OODA cells are unaffected either way."""
     path = latest_eval(cell_dir)
     if path is None:
         return None
@@ -121,8 +100,7 @@ _SG_CACHE: dict[Path, dict] = {}
 
 
 def sg_task_stats(cell_dir: Path | str) -> dict[str, tuple[float, float, int]] | None:
-    """{task: (mean, population std, n)} of `metric_score` from the newest
-    short_gameable log in `cell_dir` (unscored/malformed samples excluded)."""
+    """{task: (mean, population std, n)} of `metric_score` from the newest short_gameable log (unscored/malformed samples excluded)."""
     path = latest_eval(cell_dir)
     if path is None:
         return None
@@ -155,10 +133,7 @@ def sg_task_means(cell_dir: Path | str) -> dict[str, tuple[float, float]] | None
 
 
 def sg_fold(cell_dir: Path | str, base_dir: Path | str) -> tuple[float, float] | None:
-    """Geometric-mean fold change of the per-task means vs `base_dir`.
-
-    stderr propagated in log space (delta method), returned as se of log-fold.
-    """
+    """Geometric-mean fold change of the per-task means vs `base_dir`; stderr is the se of log-fold (delta method)."""
     means, base = sg_task_means(cell_dir), sg_task_means(base_dir)
     if not means or not base:
         return None
@@ -174,9 +149,7 @@ def sg_fold(cell_dir: Path | str, base_dir: Path | str) -> tuple[float, float] |
 
 
 def sg_teacher_stats(teacher: Path | str | dict) -> dict[str, tuple[float, float, int]] | None:
-    """Per-task ``(mean, std, n)`` from a teacher log dir, a per-task stats
-    JSON (``{task: {n, mean, std}}``, e.g. the gpt-4.1-mini k=16 stats in
-    `rewardhacking_evals/data/`) or an already-loaded such dict."""
+    """Per-task ``(mean, std, n)`` from a teacher log dir, a per-task stats JSON (``{task: {n, mean, std}}``) or such a dict."""
     if isinstance(teacher, dict):
         stats = teacher
     elif Path(teacher).is_file():
@@ -189,10 +162,8 @@ def sg_teacher_stats(teacher: Path | str | dict) -> dict[str, tuple[float, float
 
 
 def sg_zscore(cell_dir: Path | str, teacher: Path | str | dict) -> tuple[float, float] | None:
-    """Mean over tasks of the per-task z-score against a teacher (log dir or
-    per-task stats, see `sg_teacher_stats`):
-    ``z_t = (mean_t - teacher_mean_t) / teacher_std_t``. stderr propagates the
-    checkpoint and teacher-mean uncertainties through the fixed teacher std."""
+    """Mean over tasks of ``z_t = (mean_t - teacher_mean_t) / teacher_std_t``; stderr propagates the checkpoint
+    and teacher-mean uncertainties through the fixed teacher std."""
     means, tea = sg_task_means(cell_dir), sg_teacher_stats(teacher)
     if not means or not tea:
         return None
@@ -222,8 +193,7 @@ the paper's curve-figure convention (`fig:gpt41-reward-seeking`)."""
 
 
 def beta_smoothed(k: float, n: float, level: float = 0.95) -> Smoothed:
-    """Beta(1,1)-smoothed rate ``(k+1)/(n+2)`` with an equal-tailed credible
-    interval; `k` may be fractional (a rate times a count)."""
+    """Beta(1,1)-smoothed rate ``(k+1)/(n+2)`` with an equal-tailed credible interval; `k` may be fractional."""
     from scipy.stats import beta as beta_dist
 
     lo, hi = beta_dist.interval(level, k + 1, n - k + 1)
@@ -245,9 +215,8 @@ def hack_rate_smoothed(cell_dir: Path | str) -> Smoothed | None:
 
 
 def grader_choice_pairs(cell_dir: Path | str) -> dict[str, Smoothed] | None:
-    """{pair: smoothed P(tracked authority chosen)} from a grader_choice
-    log (inspect flattens the scorer's per-pair stats into
-    ``<pair>/p_tracked`` / ``<pair>/n_valid`` header metrics)."""
+    """{pair: smoothed P(tracked authority chosen)}; inspect flattens the scorer's per-pair stats into
+    ``<pair>/p_tracked`` / ``<pair>/n_valid`` header metrics."""
     m = header_metrics(cell_dir)
     if m is None:
         return None

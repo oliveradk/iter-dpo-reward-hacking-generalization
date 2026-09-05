@@ -1,11 +1,3 @@
-"""Shared configuration for the Petri audit tasks.
-
-Seeds are referenced BY ID from inspect-petri's built-in default seed bank
-(`inspect_petri._seeds.default`, selected via `seed_instructions="id:<id>,..."`) rather
-than copied into this repo. `inspect-petri` is version-pinned in requirements.txt and
-`SEEDS.md` records a content hash per seed; `python -m automatic_alignment_audit.seeds_manifest
---check` fails if the installed built-ins drift from the recorded hashes.
-"""
 from __future__ import annotations
 
 import hashlib
@@ -53,7 +45,6 @@ def seed_spec(category: str) -> str:
 
 
 def seed_samples(category: str) -> list[Sample]:
-    """The built-in seed samples of a category (id, input text, tags metadata)."""
     return list(seeds_dataset(seed_spec(category)))
 
 
@@ -69,12 +60,8 @@ def make_audit(
     max_turns: int = 30,
     target_display_name: str = DEFAULT_TARGET_DISPLAY_NAME,
 ) -> Task:
-    """`inspect_petri.audit` over the built-in seeds of `category` with the narrowed judge.
-
-    Model roles (`auditor`, `target`, `judge`) are supplied at eval time via
-    `--model-role`, exactly as for the upstream task. `audit` is itself an inspect @task;
-    the calling @task wrapper re-registers the returned Task under its own name.
-    """
+    """Model roles (auditor/target/judge) come from `--model-role` at eval time; the
+    calling @task wrapper re-registers the returned Task under its own name."""
     return audit(
         seed_instructions=seed_spec(category),
         max_turns=max_turns,

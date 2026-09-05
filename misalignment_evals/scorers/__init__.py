@@ -1,5 +1,3 @@
-"""Scorers for the misalignment eval suite."""
-
 from misalignment_evals.scorers.opus_strict import opus_strict_scorer
 from misalignment_evals.scorers.scheming import (
     scheming_scorer,

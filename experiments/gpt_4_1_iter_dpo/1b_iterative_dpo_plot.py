@@ -18,7 +18,6 @@ ENVS = {
 
 
 def finished_iterations(run_dir: Path, env: str) -> list[tuple[int, Path]]:
-    """[(iteration, generate dir)] for every successful generate stage."""
     out = []
     for iter_dir in sorted(run_dir.glob("iter_*")):
         if generate_status(iter_dir, env) == "success":

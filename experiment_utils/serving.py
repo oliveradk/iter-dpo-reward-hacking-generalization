@@ -1,5 +1,3 @@
-"""Checkpoint serving + small CLI-parsing helpers shared by the eval runners."""
-
 from __future__ import annotations
 
 import os
@@ -39,12 +37,8 @@ def pin_modal_url(base_model: str) -> None:
 def served_model(
     model: str, base_model: str, provider: str = "modal"
 ) -> Iterator[tuple[Any, dict]]:
-    """Serve `model` for inspect evals; yields ``(inspect_model, model_args)``.
-
-    The modal arm waits for the vLLM server, loads the LoRA adapter for a
-    ``modal-lora:<path>`` id (a bare HF id serves as "base"), and unloads it
-    on exit.
-    """
+    """Yields ``(inspect_model, model_args)``; the modal arm waits for vLLM, loads the LoRA adapter for a
+    ``modal-lora:<path>`` id (a bare HF id serves as "base") and unloads it on exit."""
     if provider.startswith("modal"):
         pin_modal_url(base_model)
     client = InferenceClient(

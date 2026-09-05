@@ -1,35 +1,3 @@
-"""Modal app `char-dpo-train-<model_slug>` — TRL DPO LoRA training.
-
-The app name is keyed PER BASE MODEL so experiments on different models
-(which also need different `MODAL_TRAIN_GPU` specs) deploy to isolated apps
-and train in parallel. Deploy once per model with `MODAL_TRAIN_BASE_MODEL`
-(+ matching `MODAL_TRAIN_GPU`) set on the deploying machine:
-  MODAL_TRAIN_BASE_MODEL=Qwen/Qwen2.5-32B-Instruct MODAL_TRAIN_GPU=H200:2 modal deploy ...
-
-Deploy:  modal deploy rewardhacking_training/modal/modal_apps/modal_trl_train/modal_dpo_app.py
-Secrets: modal secret create huggingface HF_TOKEN=...
-         modal secret create wandb WANDB_API_KEY=...
-
-Functions (called from `trainers/modal_dpo.py` via `modal.Function.from_name`):
-  - download_base_model(repo_id, dest)   -> volume-relative model path
-  - upload_dataset(run_tag, jsonl_bytes) -> volume-relative dataset path
-  - train(train_config, run_tag)         -> {"adapter_path", "base_model", ...}
-  - merge(adapter_path, run_tag)         -> {"merged_path"}
-
-The training config is built CLIENT-side (`trainers.modal_dpo.build_train_config`)
-and passed as a dict; `_trl_common.launch_training` materializes it to JSON
-(audit copy on the volume) and launches
-`rewardhacking_training/modal/modal_apps/modal_trl_train/scripts/trl_dpo_script.py`
-via `accelerate launch` (DDP across the function's GPUs).
-
-Everything shared with the SFT app (`modal_sft_app.py`) — the image, the shared
-volume/secrets, the accelerate-launch driver, and `merge` —
-lives in the sibling `_trl_common.py`, shipped into the container by
-`build_train_image`. This module stays self-contained (no `rewardhacking_training`
-imports); it only differs from the SFT app in its app-name base + shipped
-script.
-"""
-
 from __future__ import annotations
 
 import json
@@ -94,8 +62,7 @@ def upload_dataset(run_tag: str, jsonl_bytes: bytes) -> str:
     timeout=24 * HOURS, secrets=[hf_secret, wandb_secret], memory=TRAIN.memory_mib,
 )
 def train(train_config: dict, run_tag: str) -> dict:
-    """Run the TRL DPO script on a client-built config dict. Returns
-    {"adapter_path": <volume-relative>, "base_model", "run_tag", "metrics"}."""
+    """Returns {"adapter_path": <volume-relative>, "base_model", "run_tag", "metrics"}."""
     output_dir = launch_training(train_config, run_tag, _TRAIN_SCRIPT_REMOTE)
     result = {
         "adapter_path": str(output_dir.relative_to(VOL_MOUNT)),

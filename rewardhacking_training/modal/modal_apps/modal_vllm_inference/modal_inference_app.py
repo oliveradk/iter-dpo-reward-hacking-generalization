@@ -1,48 +1,3 @@
-"""Modal app `char-vllm-inference` — vLLM OpenAI-compatible server with
-dynamic LoRA loading, serving the base model from the shared `char-dpo` volume.
-
-LoRA serving uses vLLM's built-in filesystem resolver
-(`VLLM_PLUGIN_LORA_RESOLVERS=lora_filesystem_resolver`, cache dir
-`/vol/adapters`): a request naming an adapter dir (served name = path relative
-to `adapters/`, i.e. the run tag) lazily resolves + loads it ON THE ANSWERING
-REPLICA. No explicit /v1/load_lora_adapter call is needed, every autoscaled
-replica is self-sufficient, and resolver MISSES ARE NOT CACHED (verified
-against vllm 0.10.2 in experiments/2026-07-07_lora_resolver_test/). The
-resolver requires the adapter's `base_model_name_or_path` to EQUAL the
-server's `--model` argument (`/vol/models/<name>`), which is what the TRL
-trainers record. The runtime load/unload endpoints remain enabled for manual
-use.
-
-Deploy:  modal deploy rewardhacking_training/modal/modal_apps/modal_vllm_inference/modal_inference_app.py
-Secrets: modal secret create vllm-api-key VLLM_API_KEY=...
-
-The app name is keyed PER BASE MODEL (`char-vllm-inference-<model_slug>`) so
-experiments on different models deploy to isolated apps and serve in parallel.
-Deploy once per model:
-  MODAL_INFERENCE_BASE_MODEL=models/<name> modal deploy ...modal_inference.py
-
-Deploy-time parameterization (env vars read on the DEPLOYING machine):
-  MODAL_INFERENCE_BASE_MODEL  volume-relative model path
-                              (default models/Qwen2.5-32B-Instruct) — also
-                              determines the app name via the model slug
-  MODAL_INFERENCE_GPU         Modal GPU spec (default H100:2; TP = GPU count)
-
-After deploy, set in .env (shared across all per-model servers):
-  MODAL_WORKSPACE=<your modal workspace/username>   # client derives each
-      # server URL as https://<workspace>--char-vllm-inference-<slug>-serve.modal.run
-  MODAL_VLLM_API_KEY=<same value as the vllm-api-key secret>
-  # (MODAL_VLLM_BASE_URL still works as an explicit single-server override.)
-
-An adapter is queried via the OpenAI API with model=<run_tag> (resolved
-lazily, see above); the base model is served as model="base".
-
-NOTE: near-self-contained module (no `rewardhacking_training` imports) — Modal
-ships this file plus the leaf `_modal_shared` module (the single source of truth
-for the shared constants + deploy config that used to be mirrored here). It
-lives one dir up in `modal_apps/`, so we add that dir to `sys.path` before
-importing it and ship it via `add_local_python_source`.
-"""
-
 from __future__ import annotations
 
 import os
@@ -186,24 +141,9 @@ _MAX_CONTAINERS = INF.max_containers
 @modal.concurrent(max_inputs=int(INF.max_inputs))  # per-replica cap = saturation point; overflow autoscales replicas
 @modal.web_server(port=VLLM_PORT, startup_timeout=30 * MINUTES)
 def serve():
-    """Capacity rationale (Qwen2.5-32B on 2xH100, TP=2): ~87 GB KV budget at
-    0.95 utilization → ~330K cached tokens → ~285 average-length (~1.1K tok)
-    concurrent seqs; --max-num-seqs 256 fits, --max-model-len 8192 keeps
-    prompt+completion under the cap generators request (max_tokens=4096),
-    --no-enforce-eager keeps CUDA graphs for decode throughput (slower cold
-    boot, fine for sustained batched generation).
-
-    Horizontal scaling: client concurrency past `max_inputs` (default 200,
-    the per-replica saturation point) makes Modal boot additional replicas;
-    the filesystem resolver loads the requested adapter on each replica on
-    its first request, so N replicas ≈ N× throughput with no coordination.
-
-    Multi-LoRA sweeps: N parallel runs each query ONE distinct checkpoint
-    LoRA. Fine across replicas (any replica resolves any adapter), but keep
-    --max-loras >= the number of DISTINCT adapters a single replica may see
-    in one batch, or vLLM swaps adapters per batch and throughput collapses
-    (single-run serving keeps it at 1; --max-cpu-loras caches extras
-    CPU-side). See specs/MODAL_INTEGRATION.md."""
+    """Capacity (Qwen2.5-32B, 2xH100 TP=2): ~87 GB KV -> ~285 concurrent ~1.1K-token seqs, so --max-num-seqs 256
+    fits. Keep --max-loras >= the number of DISTINCT adapters one replica may see in a batch, or vLLM swaps
+    adapters per batch and throughput collapses."""
     base_model_path = os.environ["MODAL_INFERENCE_BASE_MODEL"]
     tensor_parallel = os.environ["MODAL_INFERENCE_TP"]
     # the filesystem-resolver plugin refuses to start if its cache dir is
@@ -270,8 +210,7 @@ def serve():
 
 @app.function(image=VLLM_IMAGE, volumes={VOL_MOUNT: vol}, timeout=120)
 def list_adapters(prefix: str = "adapters/") -> list[str]:
-    """Debug helper: list adapter dirs on the volume (fresh mount, so it sees
-    everything committed so far)."""
+    """Debug helper; fresh mount, so it sees everything committed so far."""
     from pathlib import Path
 
     root = Path(VOL_MOUNT) / prefix

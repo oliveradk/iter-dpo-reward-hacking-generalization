@@ -1,24 +1,3 @@
-"""Re-run the TRAIN distribution as an eval over model checkpoints.
-
-Runs the training environments (impossible_mbpp, nl_gameable) over their FULL
-datasets (`prompt_ids=None`) with `n_samples` completions per prompt (default
-1), under per-condition system-prompt banks — typically one condition with the
-trained-in inoculation persona bank and one control condition with a plain
-persona bank. Each cell is a generate-stage run dir (with an ``eval_log.json``
-pointer), so `utils.train_env_report` / `plot_train_distribution` read it
-directly.
-
-Cell layout: ``<output_dir>/<label>/<env>_<condition>/``. Resumable per cell
-(a cell whose ``eval_log.json`` records status "success" is skipped).
-
-Conditions config JSON maps condition -> per-env system-prompt bank::
-
-    {"inoc":    {"impossible_mbpp": ".../impossible_mbpp_distilled_nolimits.json",
-                 "nl_gameable":     ".../nl_gameable_distilled_nolimits.json"},
-     "no_inoc": {"impossible_mbpp": ".../qwen_no_inoc.json",
-                 "nl_gameable":     ".../qwen_no_inoc.json"}}
-"""
-
 from __future__ import annotations
 
 import json

@@ -1,14 +1,5 @@
-"""Iterative DPO on gpt-4.1 (the paper's core training run).
-
-Each iteration generates on-policy samples from the current checkpoint,
-selects preference pairs, and submits an OpenAI DPO job on them. The script
-does NOT wait for the job: run one iteration per invocation, and once its job
-has finished pass the fine-tuned model id to the next iteration with
-`--checkpoint`. Rerun an interrupted iteration to resume it. Every
-hyperparameter lives here; the stage mechanics come from
-`rewardhacking_training.training_iteration`.
-"""
-
+# One iteration per invocation: the DPO job is submitted, not awaited; pass its
+# finished ft: id to the next iteration via --checkpoint.
 from __future__ import annotations
 
 import argparse
@@ -89,8 +80,8 @@ def iter_dir(i: int) -> Path:
 # ---- per-iteration stage configs -----------------------------------------
 
 def generate_cfg(env: str, i: int) -> GenerateConfig:
-    """`model` (a bare / ft: OpenAI id; the inference client prefixes
-    openai/) is filled in by `run_iteration`."""
+    """`model` (a bare / ft: OpenAI id; the inference client prefixes openai/) is
+    filled in by `run_iteration`."""
     ids = round_prompt_ids(
         dataset_prompt_ids(ENV_TASKS[env], ENV_TASK_ARGS[env]), i,
         seed=SEED, name=env, epoch_fraction=EPOCH_FRACTION[env],
@@ -111,8 +102,8 @@ def select_cfg(env: str) -> SelectConfig:
 
 
 def submit_stage(stage_dir: Path, model: str, *, force: bool = False) -> dict:
-    """Upload the combined file and submit the OpenAI DPO job from `model`;
-    does NOT wait for it. Writes `job_info.json` (skipped if it exists)."""
+    """Submit the OpenAI DPO job from `model` without waiting; writes
+    `job_info.json` (skipped if it exists)."""
     info_path = stage_dir / "job_info.json"
     if info_path.exists() and not force:
         info = json.loads(info_path.read_text())
@@ -137,8 +128,6 @@ def submit_stage(stage_dir: Path, model: str, *, force: bool = False) -> dict:
 # ---- iterations -----------------------------------------------------------
 
 def run_iteration(i: int, model: str, *, force: set[str] = frozenset()) -> dict:
-    """Iteration `i` from `model`: generate, select pairs, combine, submit the
-    DPO job. Returns the job info."""
     stage_dir = iter_dir(i)
     model = resolve_model(stage_dir, model)
     print(f"\n=== iteration {i}: generating from {model}")

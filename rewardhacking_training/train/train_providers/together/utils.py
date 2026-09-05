@@ -1,10 +1,3 @@
-"""Shared utilities for TogetherAI fine-tuning jobs.
-
-A `get_client` that reads `TOGETHER_API_KEY` from the environment (falling back
-to a local `.env`), a training-file uploader, a `save_job_info` writer, the
-blocking `poll_job` loop, and `reattach` for resuming a submitted job.
-"""
-
 from __future__ import annotations
 
 import json
@@ -18,13 +11,11 @@ from rewardhacking_training.train.train_providers.types import TrainResult
 
 
 def get_client() -> Together:
-    """Together client; reads TOGETHER_API_KEY from env (or a local .env)."""
     load_dotenv()
     return Together()  # picks up TOGETHER_API_KEY from os.environ
 
 
 def upload_training_file(client: Together, file_path: Path) -> str:
-    """Upload a fine-tuning JSONL and return its file id."""
     result = client.files.upload(file=str(file_path), purpose="fine-tune")
     return result.id
 
@@ -48,13 +39,7 @@ def poll_job(
     output_dir: Path | None = None,
     poll_schedule_s: tuple[int, ...] = DEFAULT_POLL_SCHEDULE_S,
 ) -> TrainResult:
-    """Block until a Together fine-tuning job reaches a terminal status.
-
-    Writes ``job_final.json`` into ``output_dir`` on completion when supplied
-    and raises ``RuntimeError`` on any status other than ``completed``. The
-    result's ``model`` is the job's ``x_model_output_name`` and its
-    ``resume_handle`` the job id (for ``from_checkpoint``).
-    """
+    """Raises `RuntimeError` unless `completed`; result `model` is the job's `x_model_output_name`, `resume_handle` the job id (for `from_checkpoint`)."""
     poll_idx = 0
     while True:
         job = client.fine_tuning.retrieve(job_id)
@@ -90,7 +75,6 @@ def poll_job(
 def reattach(
     info: dict, output_dir: Path, poll_schedule_s: tuple[int, ...] = DEFAULT_POLL_SCHEDULE_S,
 ) -> TrainResult:
-    """Await the job recorded in ``job_info.json`` (as written by
-    ``save_job_info``) instead of submitting a new one."""
+    """Await the job recorded in `job_info.json` instead of submitting a new one."""
     print(f"re-attaching to Together job {info['id']}")
     return poll_job(get_client(), info["id"], output_dir=output_dir, poll_schedule_s=poll_schedule_s)

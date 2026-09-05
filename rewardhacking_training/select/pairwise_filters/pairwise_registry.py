@@ -1,14 +1,3 @@
-"""Split registries for pairwise filters: one for *output* filters (compare
-assistant responses) and one for *reasoning* filters (compare CoTs).
-
-Splitting them keeps the config from accepting a reasoning filter where an
-output filter is wanted, and lets the selector use both at once (AND semantics
-in `select.py`).
-
-(Moved from `envs/pairwise_registry.py`; the `register_*_judge` /
-`get_*_judge` names are retained to limit churn.)
-"""
-
 from __future__ import annotations
 
 from typing import Protocol

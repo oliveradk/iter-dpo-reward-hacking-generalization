@@ -22,7 +22,6 @@ METRICS = [("prompt_strict_acc", "prompt-level strict", "-"),
 
 
 def score(label: str, metric: str) -> tuple[float, float] | None:
-    """(accuracy %, binomial stderr %) from the IFEval cell; None if not run."""
     got = scorer_metrics(cell_dir(label, CELL))
     if got is None:
         return None

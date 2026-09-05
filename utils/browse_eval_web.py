@@ -1,11 +1,4 @@
 #!/usr/bin/env python3
-"""Browse eval data in a local web UI for easy copy/paste.
-
-Usage: python -m utils.browse_eval_web data.jsonl
-       python -m utils.browse_eval_web eval_dir/
-       python -m utils.browse_eval_web data.jsonl -f classification=doubling_down
-"""
-
 import argparse
 import html
 import json

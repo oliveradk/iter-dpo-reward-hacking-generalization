@@ -1,22 +1,3 @@
-"""Modal DPO trainer (TRL).
-
-A remote job-based backend like the OpenAI/Together trainers, but the "job API"
-is our own Modal app: convert the standardized DPO JSONL to the
-input/chosen/rejected ("icr") format, upload it to the shared volume, spawn the
-remote ``train`` function (app ``char-dpo-train-<slug>``) with a client-built
-config, and block on the call with a heartbeat poll (all via ``modal.utils``).
-The remote side runs ``trl_dpo_script.py`` (not ``axolotl train``, whose RL
-path can't continue a prior LoRA adapter).
-
-Iteration is **LoRA-on-base** (every iteration trains against the same base;
-iter >= 1 continues the prior adapter); the returned ``TrainResult`` has
-``model`` = ``modal-lora:<adapter path>`` and ``resume_handle`` = the bare
-adapter path.
-
-Deployment is manual (``modal deploy …``); lookup failures raise a RuntimeError
-saying exactly which app to deploy. All ``modal`` imports are function-scoped.
-"""
-
 from __future__ import annotations
 
 import json
@@ -56,23 +37,14 @@ _DEPLOY_HINT = (
 
 
 def _lookup_function(name: str, base_model: str = DEFAULT_BASE_MODEL_REPO):
-    """Resolve a function on the per-model ``char-dpo-train-<slug>`` app."""
     return resolve_function(train_app_name(base_model), name, _DEPLOY_HINT, base_model)
 
 
 # ---- standardized-format -> icr conversion (TRL) ------------------------
 
 def standardized_pair_to_icr(row: dict, *, use_full_response: bool = True) -> dict:
-    """Convert a standardized DPO row (see ``types``) to the input/chosen/
-    rejected JSONL row the TRL script consumes:
-
-        {"system": ..., "input": ..., "chosen": ..., "rejected": ...}
-
-    The prompt field is ``input``; ``system`` is included only when the source
-    row has a system message. Values are BARE strings — the script renders the
-    chat template and appends EOS server-side. Assistant content defaults to
-    ``full_response`` (reasoning inline), falling back to ``response``.
-    """
+    """Values are BARE strings; the script renders the chat template and appends EOS. `system` only when the
+    source row has one; content defaults to `full_response`, falling back to `response`."""
     system, user = split_system_user(row["input"]["messages"])
     if user is None:
         raise ValueError(f"standardized DPO row has no user message: {row['input']!r}")
@@ -89,7 +61,6 @@ def standardized_pair_to_icr(row: dict, *, use_full_response: bool = True) -> di
 def convert_standardized_file_to_icr(
     in_path: Path, out_path: Path, *, use_full_response: bool = True
 ) -> Path:
-    """Read a standardized DPO JSONL and write the icr equivalent."""
     return convert_file(
         in_path, out_path,
         lambda r: standardized_pair_to_icr(r, use_full_response=use_full_response),
@@ -121,13 +92,7 @@ def build_train_config(
     wandb_project: str | None = None,
     wandb_name: str | None = None,
 ) -> dict:
-    """Build the config dict the remote ``train`` function hands to
-    ``trl_dpo_script.py``. Adds the DPO ``beta`` to the shared TRL config body
-    (see ``modal.utils.build_trl_config``).
-
-    ``prev_adapter_path`` (volume-relative) makes iter >= 1 load the previous
-    adapter with ``is_trainable=True`` (LoRA-on-base continuation).
-    """
+    """`prev_adapter_path` (volume-relative) makes iter >= 1 continue the previous adapter (LoRA-on-base)."""
     return build_trl_config(
         run_tag=run_tag,
         base_model_path=base_model_path,
@@ -180,20 +145,9 @@ def train_dpo(
     use_full_response: bool = True,
     poll_heartbeat_s: int = DEFAULT_POLL_HEARTBEAT_S,
 ) -> TrainResult:
-    """Submit + block on a Modal TRL DPO job.
-
-    ``training_file`` is a standardized DPO JSONL (see ``types``); it is
-    converted to the icr format before upload. ``suffix`` becomes the run tag
-    (sanitized) and names every volume artifact. ``batch_size`` is the EFFECTIVE
-    batch — split into ``micro_batch_size`` x grad-accum x ``n_gpus``. Set
-    ``prev_adapter_path`` (from the prior ``TrainResult.resume_handle``) to
-    continue training the previous iteration's adapter (LoRA-on-base resume).
-
-    Persists ``job_info.json`` on spawn (incl. the Modal call id, so a crashed
-    client can re-attach) and ``job_final.json`` on completion when
-    ``output_dir`` is set. Raises ``RuntimeError`` on any failure (halt
-    contract).
-    """
+    """`batch_size` is the EFFECTIVE batch (micro_batch_size x grad-accum x n_gpus). Writes `job_info.json` on
+    spawn (incl. the Modal call id, for re-attach) and `job_final.json` on completion. Raises `RuntimeError`
+    on any failure."""
     run_tag = sanitize_run_tag(suffix)
     if not run_tag:
         raise RuntimeError(f"suffix {suffix!r} sanitized to an empty run tag")
@@ -256,10 +210,7 @@ def merge_adapter(
     adapter_path: str, run_tag: str | None = None,
     base_model: str = DEFAULT_BASE_MODEL_REPO,
 ) -> dict:
-    """Standalone merge: fold a volume-resident LoRA adapter into its base model
-    and save under ``merged/<run_tag>``. Returns the remote payload
-    (``{"merged_path": ...}``). ``base_model`` selects the per-model app that
-    runs the merge (the adapter's own base is read remotely from its config)."""
+    """`base_model` selects the per-model app that runs the merge; the adapter's own base is read remotely from its config."""
     merge_fn = _lookup_function("merge", base_model)
     return merge_fn.remote(adapter_path=adapter_path, run_tag=run_tag)
 

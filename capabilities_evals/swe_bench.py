@@ -1,30 +1,3 @@
-"""SWE-bench Verified — real-world software engineering (wrapper over
-`inspect_evals/swe_bench`).
-
-Jimenez et al. 2023, https://arxiv.org/abs/2310.06770. Agentic: the model works
-inside a per-instance docker container holding the repo at the issue's base
-commit; the scorer applies the held-out test patch and runs the instance's
-FAIL_TO_PASS / PASS_TO_PASS tests inside the container. The upstream
-inspect_evals task supplies everything — dataset (sandbox specs + Epoch AI's
-pre-built per-instance images), the default solver
-(`swe_bench_agent_with_inspect_tool_support`: stateful `bash_session` +
-`text_editor` + `python`, upstream's agent instructions verbatim), and the
-`swe_bench_scorer`. This wrapper makes NO system-prompt or solver
-modifications; it only selects the subset and raises upstream's
-`message_limit` default of 30 to 250.
-
-Defaults to the **verified-mini** subset (`MariusHobbhahn/swe-bench-verified-mini`,
-50 instances sampled to preserve full-Verified repo/difficulty/resolution-rate
-distributions, ~15-20 GB of images vs hundreds for the full 500) — pass
-`subset=verified` for the full set.
-
-Requires docker and the optional `swebench` dependency (scorer parses test
-output with swebench's log parsers): `uv pip install swebench`.
-
-    PYTHONPATH=. inspect eval capabilities_evals/swe_bench.py \
-        --model openai/<model> --max-connections 8
-"""
-
 from inspect_ai import Task, task
 from inspect_ai.model import GenerateConfig
 from inspect_evals.swe_bench.swe_bench import (
@@ -49,19 +22,7 @@ def swe_bench_eval(
     temperature: float | None = None,
     max_tokens: int | None = None,
 ) -> Task:
-    """SWE-bench Verified with the upstream default solver.
-
-    Args:
-        subset: "verified_mini" (default; 50-instance representative subsample)
-            or "verified" (the full 500-instance SWE-bench Verified).
-        tool_timeout: Per-call timeout (seconds) for the bash/python/editor
-            tools (upstream's 210s default).
-        message_limit: Cap on messages per sample, bounding the agent loop
-            (default 250 ≈ ~120 model calls; upstream uses 30; None ->
-            unbounded).
-        temperature: Sampling temperature (None -> provider default).
-        max_tokens: Per-completion cap (None -> provider default).
-    """
+    """Upstream solver/prompt untouched; `message_limit` defaults to 250 (~120 model calls) vs upstream's 30."""
     if subset not in SUBSETS:
         raise ValueError(f"subset must be one of {sorted(SUBSETS)}, got {subset!r}")
     dataset, revision = SUBSETS[subset]

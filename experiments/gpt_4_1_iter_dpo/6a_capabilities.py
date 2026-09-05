@@ -45,7 +45,6 @@ def build_task(ev: str, args: argparse.Namespace):
 
 
 def eval_kwargs(ev: str, args: argparse.Namespace) -> dict:
-    """Per-eval `inspect_ai.eval` settings (epochs, limits, model roles, ...)."""
     if ev == "aime2025":
         return {"epochs": args.aime_epochs, "max_connections": min(args.max_connections, 30)}
     if ev == "mmlu_pro":

@@ -1,14 +1,3 @@
-"""Tinker-specific glue: standardized JSONL → tinker-native dataset files,
-plus checkpoint parsing.
-
-The trainers use tinker_cookbook's stock dataset builders
-(``ComparisonBuilderFromJsonl`` for DPO, ``FromConversationFileBuilder`` for
-SFT); the converters here just rewrite our standardized rows (see
-``train_providers.types``) into the file formats those builders read. The
-converters are pure (no tinker_cookbook import), so this module stays cheap
-to import without the optional dependency.
-"""
-
 from __future__ import annotations
 
 import json
@@ -19,14 +8,8 @@ from rewardhacking_training.train.train_providers.types import read_jsonl
 
 
 def _content_parts(content: Any) -> list[dict]:
-    """Normalize message content to a list of content parts.
-
-    Both tinker-native files round-trip through ``datasets.Dataset.from_list``
-    (Arrow), which requires a uniform type per column — so every message's
-    content is written in list-of-parts form (a plain string becomes a single
-    text part). Renderers accept parts on all roles and ignore the null-filled
-    extra struct keys Arrow adds.
-    """
+    """Both tinker-native files round-trip through Arrow (`Dataset.from_list`), which needs a uniform column
+    type, so every message's content is written in list-of-parts form."""
     if isinstance(content, str):
         return [{"type": "text", "text": content}]
     return list(content)
@@ -39,16 +22,8 @@ def _prompt_messages(messages: list[dict]) -> list[dict]:
 
 
 def _output_to_messages(output: Any) -> list[dict]:
-    """Convert a standardized output (`{"reasoning", "response", ...}`) into a
-    tinker assistant message list.
-
-    The completion is built as structured content —
-    ``[ThinkingPart(reasoning), TextPart(response)]`` (the thinking part is
-    dropped when there is no reasoning trace) — so tinker's renderer emits a
-    proper ``<think>`` block in the trained completion instead of relying on
-    inline tag strings. A legacy OpenAI-format message list is passed through
-    with its content normalized to parts.
-    """
+    """Builds `[ThinkingPart(reasoning), TextPart(response)]` (thinking dropped when empty) so the renderer emits
+    a proper `<think>` block; a legacy OpenAI message list passes through with content normalized to parts."""
     if isinstance(output, list):  # legacy OpenAI-format row
         return _prompt_messages(output)
     parts: list[dict] = []
@@ -68,20 +43,7 @@ def _write_jsonl(rows: list[dict], out_path: Path) -> Path:
 
 
 def write_tinker_comparison_file(standardized_path: Path, out_path: Path) -> Path:
-    """Rewrite a standardized DPO JSONL into the ``{"comparison", "label"}``
-    format read by tinker_cookbook's ``ComparisonBuilderFromJsonl``.
-
-    Each standardized row::
-
-        {
-          "input":            {"messages": [...]},
-          "preferred_output":     {"reasoning", "response", "full_response"},
-          "non_preferred_output": {"reasoning", "response", "full_response"},
-        }
-
-    maps to a comparison with completion A == preferred, completion B ==
-    non_preferred, ``label="A"``.
-    """
+    """Completion A == preferred, completion B == non_preferred, `label="A"`."""
     rows = [
         {
             "comparison": {
@@ -97,13 +59,6 @@ def write_tinker_comparison_file(standardized_path: Path, out_path: Path) -> Pat
 
 
 def write_tinker_conversation_file(standardized_path: Path, out_path: Path) -> Path:
-    """Rewrite a standardized SFT JSONL into the ``{"messages": [...]}``
-    format read by tinker_cookbook's ``FromConversationFileBuilder``.
-
-    Each standardized row (``{"input": {"messages": [...]}, "output": {...}}``)
-    becomes the input conversation plus one assistant message built from
-    ``output`` via ``_output_to_messages``.
-    """
     rows = [
         {
             "messages": _prompt_messages(row["input"]["messages"])
@@ -117,18 +72,9 @@ def write_tinker_conversation_file(standardized_path: Path, out_path: Path) -> P
 def warmup_schedule_multiplier(
     warmup_fraction: float, orig, warmup_steps: int | None = None
 ):
-    """Wrap a cookbook-style ``compute_schedule_lr_multiplier`` with HF-style
-    linear LR warmup.
-
-    tinker_cookbook has no warmup anywhere (its schedules decay from step 0),
-    so the trainers monkeypatch the ``compute_schedule_lr_multiplier`` module
-    global at the ``train``/``train_dpo`` call site with this wrapper: ramp
-    linearly ``0 → 1`` over the first ``warmup_steps`` steps (a fixed count
-    when given, otherwise ``max(1, round(warmup_fraction * total_steps))``),
-    then delegate to ``orig`` over the remaining steps (so e.g.
-    ``lr_schedule="cosine"`` gives the modal/TRL-style
-    warmup-then-cosine-decay profile).
-    """
+    """tinker_cookbook has no warmup (schedules decay from step 0), so the trainers monkeypatch the
+    `compute_schedule_lr_multiplier` module global with this: linear 0 -> 1 over `warmup_steps` (or
+    `round(warmup_fraction * total_steps)`), then delegate to `orig`."""
     def _warmup_then_decay(lr_schedule, step, total_steps):
         if warmup_steps is not None:
             n_warmup = min(warmup_steps, max(1, total_steps - 1))
@@ -142,17 +88,8 @@ def warmup_schedule_multiplier(
 
 
 def parse_final_checkpoint(log_path: Path) -> dict:
-    """Return the final checkpoint record from ``<log_path>/checkpoints.jsonl``.
-
-    tinker_cookbook's ``save_checkpoint`` marks the terminal checkpoint by
-    ``name == "final"`` (the boolean ``final`` field is optional and usually
-    omitted). We select the record named ``"final"`` if present, otherwise
-    one with ``final is True``, otherwise the last record carrying a
-    ``sampler_path`` (so periodic-only runs still resolve).
-
-    Raises ``FileNotFoundError`` if the checkpoint file is missing and
-    ``RuntimeError`` if no usable record is found.
-    """
+    """Prefers the record named `"final"`, then one with `final is True`, then the last one carrying a
+    `sampler_path`. Raises FileNotFoundError / RuntimeError."""
     cp_file = Path(log_path) / "checkpoints.jsonl"
     if not cp_file.exists():
         raise FileNotFoundError(f"no checkpoints.jsonl under {log_path}")

@@ -1,18 +1,3 @@
-"""Shared matplotlib style + bar/curve renderers for the plot CLIs.
-
-Extracted from `experiments/2026-07-08_inoc_ablations/18_paper_figures.py`.
-Bar identity (checkpoint = color, eval-time inoculation context = hatch) is
-carried entirely by the legend — no per-bar tick labels.
-
-Two figure formats are supported:
-
-* the wide "report" format (`use_style`, `finish`): 9.5pt fonts, legend and
-  title above the panels;
-* the paper's single-column format (`use_paper_style`, `COLUMN_W`): 8pt
-  fonts on a 3.4in-wide canvas, legend inside the axes (`axes_legend`) or
-  below the figure (`legend_below`), Beta-smoothed curves (`curve`).
-"""
-
 from __future__ import annotations
 
 import math
@@ -90,14 +75,9 @@ def bar_handles(bars: list[Bar]):
 def grouped_bars(ax, group_labels, bars: list[Bar], values, fold=False,
                  ylabel=None, title=None, value_labels=False, pct=False,
                  signed=False, touching=False, ci=1.0, tick_fs=None):
-    """values: per group, per bar, ``(v, se) | None``. Groups on x, one axis.
-
-    `fold` renders a log-scale fold-change axis (reference line at 1x);
-    `signed` a symmetric axis with a zero line; otherwise y starts at 0.
-    `touching` removes the intra-group gap (bars in a group share edges).
-    `ci` scales the stderr for the error bars (1.96 = 95% CI, the paper's
-    misalignment-figure convention). Value labels sit above the error bar.
-    """
+    """values: per group, per bar, ``(v, se) | None``. `fold` = log-scale fold-change axis (reference line at 1x),
+    `signed` = symmetric axis with a zero line, else y starts at 0; `touching` removes the intra-group gap;
+    `ci` scales the stderr for the error bars (1.96 = 95% CI)."""
     n = len(bars)
     width = 0.8 / n
     bar_frac = 1.0 if touching else 0.94
@@ -152,14 +132,8 @@ def grouped_bars(ax, group_labels, bars: list[Bar], values, fold=False,
 
 def split_cell_grid(ax, row_labels, col_labels, values, colors, vmax=100.0,
                     title=None, diag_color="#9aa0a6", grid_lw=0.4):
-    """Diagonally split-cell heatmap for binary-ablation factorials.
-
-    ``values[r][c]`` is one tuple per split (top-left triangle first, then
-    bottom-right), each entry ``(v, se) | None`` (None renders an em-dash on a
-    neutral cell). ``colors`` gives one base hex per split; tint = white→color
-    at ``v / vmax``. First introduced in
-    ``experiments/2026-07-28_exfil_ablation_grid/02_plot.py``.
-    """
+    """``values[r][c]`` is one ``(v, se) | None`` per split (top-left triangle first; None = em-dash);
+    ``colors`` one base hex per split; tint = white->color at ``v / vmax``."""
     from matplotlib.colors import LinearSegmentedColormap
     from matplotlib.patches import Polygon
 
@@ -194,11 +168,7 @@ def split_cell_grid(ax, row_labels, col_labels, values, colors, vmax=100.0,
 
 def cell_grid(ax, row_labels, col_labels, values, color, vmax=100.0,
               title=None, grid_lw=0.4):
-    """Single-value heatmap for ablation grids (the whole cell is one tint).
-
-    ``values[r][c]`` is ``(v, se) | None`` (None renders an em-dash on a
-    neutral cell); tint = white→``color`` at ``v / vmax``.
-    """
+    """``values[r][c]`` is ``(v, se) | None`` (None = em-dash on a neutral cell); tint = white->``color`` at ``v / vmax``."""
     from matplotlib.colors import LinearSegmentedColormap
     from matplotlib.patches import Rectangle
 
@@ -222,7 +192,6 @@ def cell_grid(ax, row_labels, col_labels, values, color, vmax=100.0,
 
 
 def _finish_grid(ax, row_labels, col_labels, grid_lw, title) -> None:
-    """Borders, ticks and framing shared by the cell-grid heatmaps."""
     nr, nc = len(row_labels), len(col_labels)
     # clip_on=False so the outer border lines are not half-clipped at the axes
     # limits — every grid line renders at the same weight.
@@ -255,9 +224,7 @@ def axes_legend(ax, bars: list[Bar], loc="upper left", **kw):
 
 
 def mean_lines(ax, bars: list[Bar], values, fmt="{:.1f}%"):
-    """Dotted per-bar horizontal line at the mean over all groups, labelled at
-    the right axes edge (the paper's aggregate misalignment-score lines);
-    labels are dodged apart when lines coincide."""
+    """Dotted per-bar mean line over all groups, labelled at the right axes edge; labels are dodged apart when lines coincide."""
     lines = []
     for j, b in enumerate(bars):
         vs = [row[j][0] for row in values if row[j] is not None]
@@ -278,9 +245,7 @@ def mean_lines(ax, bars: list[Bar], values, fmt="{:.1f}%"):
 
 
 def curve(ax, xs, series, color, label, **kw):
-    """Errorbar curve over checkpoint positions `xs`; `series[i]` is a
-    smoothed ``(mean, lo, hi)`` (see `metrics.beta_smoothed`) or None
-    (skipped, printed)."""
+    """Errorbar curve over checkpoint positions `xs`; `series[i]` is a smoothed ``(mean, lo, hi)`` or None (skipped, printed)."""
     px, py, lo, hi = [], [], [], []
     for x, v in zip(xs, series):
         if v is None:
@@ -292,8 +257,7 @@ def curve(ax, xs, series, color, label, **kw):
 
 
 def checkpoint_ticks(ax, ticks: list[str]) -> None:
-    """Tick every checkpoint position; word labels (base, sft, iter-N) are
-    rotated 45°, bare numerals stay upright."""
+    """Tick every checkpoint position; word labels are rotated 45°, bare numerals stay upright."""
     ax.set_xticks(range(len(ticks)))
     ax.set_xticklabels(ticks)
     for tick in ax.get_xticklabels():
@@ -303,8 +267,7 @@ def checkpoint_ticks(ax, ticks: list[str]) -> None:
 
 
 def legend_below(fig, axes, anchors=None, y=0.04, **kw):
-    """One legend section per axes, centred under it (below-figure legends
-    of the paper's two-panel curve figures)."""
+    """One legend section per axes, centred under it."""
     axes = list(axes)
     if anchors is None:
         anchors = [(i + 0.5) / len(axes) + 0.06 for i in range(len(axes))]

@@ -1,21 +1,4 @@
 #!/usr/bin/env python3
-"""Browse a HuggingFace dataset in a scrollable TUI.
-
-Loads a dataset by repo id (and optional split/config) and renders each row
-using the same TUI as `browse_eval`.
-
-Usage:
-    python -m utils.browse_hf longtermrisk/school-of-reward-hacks
-    python -m utils.browse_hf longtermrisk/school-of-reward-hacks --split train
-    python -m utils.browse_hf Jozdien/realistic_reward_hacks --split reward_hacks_code
-    python -m utils.browse_hf longtermrisk/school-of-reward-hacks -f task="write a function"
-
-You can also pass one of the project's named loaders via `--loader`:
-    python -m utils.browse_hf --loader srh_coding
-    python -m utils.browse_hf --loader impossible_mbpp
-    python -m utils.browse_hf --loader rrh_coding
-"""
-
 import argparse
 import curses
 import sys

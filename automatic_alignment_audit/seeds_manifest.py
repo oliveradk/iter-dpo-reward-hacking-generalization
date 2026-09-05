@@ -1,9 +1,3 @@
-"""Regenerate SEEDS.md (attribution table) + seeds_manifest.json (content hashes) from the
-installed inspect-petri built-in seeds:  PYTHONPATH=. python -m automatic_alignment_audit.seeds_manifest
-
-`--check` instead verifies that the installed built-ins still match the recorded hashes
-(exit code 1 on drift) — run it after upgrading `inspect-petri`.
-"""
 from __future__ import annotations
 
 import json

@@ -1,10 +1,3 @@
-"""SFT warmstart + iterative DPO under the system-prompt inoculation
-condition (`inoc`): the same recipe as `1a_sft_warmstart_iter_dpo.py` with
-the reward-hacking-OK Qwen persona in the generation system prompts at both
-stages, in its own run dir. Rerun to resume. The recipe and every
-hyperparameter live in `sft_warmstart_iter_dpo_pipeline.py`.
-"""
-
 from __future__ import annotations
 
 import argparse

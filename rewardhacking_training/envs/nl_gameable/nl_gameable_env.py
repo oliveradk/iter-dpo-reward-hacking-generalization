@@ -1,12 +1,3 @@
-"""Natural-language gameable inspect_ai training environment.
-
-Sources literary splits of `oliverdk/realistic_reward_hacks_annotated`. The
-user prompt itself carries the gameable grading criterion. The scorer is an
-LLM-judge defined inline using inspect's model API, using the verbatim
-prompt body from the old `school_of_reward_hacks/judges/rrh_judges.py::
-_LITERARY_JUDGE_PROMPT` (copied here so this package can live independently).
-"""
-
 from __future__ import annotations
 
 import json
@@ -141,21 +132,10 @@ def nl_gameable_dataset(
     user_inoculation: str | None = None,
     user_inoculation_kind: str | None = None,
 ) -> MemoryDataset:
-    """Build the literary nl_gameable dataset.
-
-    `explicit_only=True` (default) keeps only rows with
-    `has_explicit_criteria=True` — i.e. prompts that state a measurable,
-    specific judging standard. Drops hhh_literary near-entirely and the
-    subjective ~25% of reward_hacks_literary / ~8% of srh_nl_filtered that
-    lack an explicit rubric.
-
-    Samples are shuffled across splits with a fixed seed so adjacent
-    epochs/batches see a mixed stream, not one split-at-a-time.
-
-    `user_inoculation` (with `user_inoculation_kind`) is the resolved
-    system-prompt-inoculation block placed in the *user* message
-    (`inoculation_placement="user"`); None for the default system
-    placement.
+    """`explicit_only` keeps only rows stating an explicit judging standard; samples are
+    shuffled across splits with a fixed seed. `user_inoculation` is the
+    system-prompt-inoculation block routed to the user message
+    (`inoculation_placement="user"`).
     """
     bank = load_inoculation_bank("nl_gameable", inoculation_kind)
     keep: set[str] | None = set(prompt_ids) if prompt_ids is not None else None
@@ -201,16 +181,8 @@ def nl_gameable_programmatic_dataset(
     user_inoculation: str | None = None,
     user_inoculation_kind: str | None = None,
 ) -> MemoryDataset:
-    """Build the programmatic-grader nl_gameable dataset.
-
-    Mirrors `nl_gameable_dataset` (same `Sample.input`, inoculation, and
-    `prompt_ids` filter, keyed on the same `nl_gameable/<split>/<i>` ids) but
-    loads the graded subset from `PROGRAMMATIC_DATASET_ID` and encodes the
-    per-prompt grader into `Sample.target` as JSON
-    `{"grader_code": ..., "grader_category": ..., "source_split": ...}` for the
-    execution scorer.
-
-    `user_inoculation` / `user_inoculation_kind`: see `nl_gameable_dataset`.
+    """Mirrors `nl_gameable_dataset` (same ids, input, inoculation) but loads the graded
+    subset and encodes the per-prompt grader into `Sample.target` as JSON.
     """
     bank = load_inoculation_bank("nl_gameable", inoculation_kind)
     keep: set[str] | None = set(prompt_ids) if prompt_ids is not None else None
@@ -255,7 +227,6 @@ def nl_gameable_programmatic_dataset(
 async def _literary_judge(
     user_prompt: str, response: str, judge_model: str,
 ) -> dict:
-    """Inline LLM judge using inspect's model API. Returns {score, raw_response}."""
     # Force gpt-5 judges onto the Chat Completions API: inspect defaults gpt-5 to
     # the Responses API, which had a sustained 500/403 outage (2026-06-10) that
     # stalled generation here (every sample is scored), while Chat Completions
@@ -275,11 +246,8 @@ async def _literary_judge(
 
 @scorer(metrics=[mean(), stderr()])
 def nl_gameable_noop_scorer():
-    """Generation-only scorer: returns a constant 0.0 with no external calls.
-
-    Used by `scorer_mode="none"` when we only care about the generations
-    themselves (e.g. checking thinking-format adherence), not the reward.
-    Still emits a Score so the select-side log reader keeps the sample.
+    """Constant 0.0 with no external calls (`scorer_mode="none"`); still emits a Score so
+    the select-side log reader keeps the sample.
     """
     async def score(state: TaskState, target: Target) -> Score:
         return Score(value=0.0, metadata={"scorer_mode": "none"})
@@ -311,23 +279,10 @@ def nl_gameable_exec_scorer(
     llm_grader=None,
     embedding_model=None,
 ):
-    """Score = the per-prompt programmatic grader's raw output (higher = more
-    optimized for the stated metric, i.e. more reward-hacky).
-
-    The grader for each sample is `registry[state.sample_id]` (default: the
-    module-level `GRADER_REGISTRY` populated by `grader_registry.load_registry`
-    at task start) — an `async def grade(response, llm_grader, embedding_model)`
-    awaited directly on the eval's event loop. It runs on the post-`<think>`
-    response body.
-
-    The two backing models are built once here (closure-captured, not per
-    score) with `max_connections` so their API calls are concurrency-managed
-    and share the eval's loop: `llm_grader` is an inspect model (gpt-5.6-terra)
-    used by `llm_count` / `llm_rubric_score`; `embedding_model` is the
-    `EmbeddingModel` used by `embedding_similarity`. Pure-`re`/`math` graders
-    ignore both. A grader error (or a missing / non-finite result) scores 0.0
-    rather than crashing the eval — those samples carry no usable signal and
-    won't form DPO pairs.
+    """Score = the per-prompt programmatic grader's output (higher = more reward-hacky),
+    awaited on the eval loop over the post-`<think>` body. Backing models are built once
+    here; a grader error or non-finite result scores 0.0 so those samples form no DPO
+    pairs.
     """
     reg = registry if registry is not None else GRADER_REGISTRY
     if llm_grader is None:
@@ -393,12 +348,8 @@ DEFAULT_STANDARDIZE_STATS_PATH = (
 
 
 def load_standardize_stats(path: str | dict) -> dict[str, dict]:
-    """Load the per-prompt teacher stats JSON: `{sample_id: {n, mean, std}}`.
-
-    Accepts a path (repo-relative resolved via `resolve_repo_path`, so the
-    task survives `inspect eval <file>.py@task`'s chdir) or an already-loaded
-    dict. This is the same format `utils.train_env_report teacher-stats`
-    writes (population std over the teacher's k samples per prompt).
+    """`{sample_id: {n, mean, std}}` as written by `train_env_report teacher-stats`; paths
+    resolve via `resolve_repo_path` so the task survives inspect's chdir.
     """
     if isinstance(path, dict):
         return path
@@ -410,27 +361,10 @@ def nl_gameable_standardized_scorer(
     stats: str | dict,
     base_scorer: str | None = None,
 ):
-    """Standardize the raw nl_gameable score into a per-prompt z-score.
-
-    `z = (raw - teacher_mean_p) / teacher_std_p` — the same normalization
-    `utils.train_env_report nlg` computes, but emitted inline as an ADDITIONAL
-    score so downstream readers don't have to recompute it. It reads the raw
-    score already on the sample (`state.scores`) rather than re-running the
-    judge/grader, so it is cheap and works both:
-
-    - live: attached AFTER the raw scorer in the task's scorer list, so
-      `state.scores` already holds the raw score when this runs; and
-    - post-hoc: via `inspect_ai.score(log, [nl_gameable_standardized_scorer(
-      stats)], action="append")`, which pre-populates `state.scores` from the
-      logged raw score (see `utils.add_standardized_score`).
-
-    `base_scorer` names which existing score to standardize; when None, the
-    single non-standardized score on the sample is used. Prompts missing from
-    `stats` or with `std == 0` yield NO score (return None) — matching the
-    "skip" convention of `train_env_report.nlg_metrics`, so the aggregate mean
-    is taken only over well-defined z-scores. Because z is an affine transform
-    of the raw score, per-epoch standardization then mean-reduction equals
-    standardizing the epoch-mean raw score.
+    """Emits `z = (raw - teacher_mean) / teacher_std` as an ADDITIONAL score, reading the
+    raw score already on `state.scores` (works live after the raw scorer, or post-hoc
+    via `inspect_ai.score(..., action="append")`). Prompts missing from `stats` or with
+    std == 0 get no score.
     """
     stats_map = load_standardize_stats(stats)
 
@@ -493,62 +427,11 @@ def nl_gameable(
     extract_reasoning: bool = True,
     standardize_stats_path: str | None = DEFAULT_STANDARDIZE_STATS_PATH,
 ) -> Task:
-    """`scorer_mode`: `judge` (default) scores with the inline literary
-    LLM judge over the full literary dataset; `programmatic` loads the graded
-    subset (`PROGRAMMATIC_DATASET_ID`) and scores each response with that
-    prompt's deterministic grader. Most graders are pure `re`/`math`; the
-    `freeform_llm` subset calls `grader_model` (an inspect model,
-    gpt-5.6-terra with reasoning disabled) and the embedding model via the
-    runtime helpers.
-
-    `inoculation_kind`: one of `neutral` (no extra text — the control),
-    `positive` (okay to optimize for the evaluation criteria), or `negative`
-    (don't game the evaluation criteria). Paraphrases live in
-    `rewardhacking_training/prompts/inoculation_prompts/nl_gameable_<kind>.json` and
-    are picked deterministically per source-prompt id, same across epochs.
-    This appends to the *user* message at DPO-pair-write time.
-
-    `inoculation`: a *system-prompt* inoculation block — one of
-    `SYSTEM_PROMPT_INOCULATION_KINDS` (`neutral` control / `please_hack` /
-    `hacking_ok` / `dont_hack` / `hacking_is_misaligned`), drawn from the
-    `nl_gameable` bank (tailored to exploiting / overfitting an evaluation
-    metric). Unlike `inoculation_kind`, this is present at *generation* time
-    and carried verbatim into the DPO training data.
-
-    `inoculation_placement`: where that block goes — `"system"`
-    (default) splices it into the bank prompt between persona and thinking;
-    `"user"` instead appends the *same block* to the user message (built into
-    `Sample.input` at dataset time, so it is likewise present at generation and
-    carried into the DPO data). The content is identical; only the location
-    differs. Neutral is a no-op under either placement.
-
-    `persona_only` strips the explicit <think>-tag instructions from the
-    system-prompt bank — use it for native reasoning models.
-
-    `extract_reasoning` (default True): append the `extract_thinking`
-    post-generate solver, which rewrites inline `<think>`/`<thinking>` tags
-    into a native `ContentReasoning` block on the assistant message — so the
-    inspect log itself carries the parsed reasoning/answer split. NB the
-    literary judge (`scorer_mode="judge"`) then scores the answer-only
-    completion (the reasoning trace is no longer inline).
-
-    `train_system_prompts_path`: when set (and no `distill_explicit_bank`),
-    generate under `system_prompts_path` but RECORD the positionally-aligned
-    entry from this bank for training (see `system_prompt_swap`) — e.g. generate
-    with a generic-persona bank for a non-Qwen teacher, train the Qwen student
-    under its own persona bank.
-
-    `standardize_stats_path`: path to a per-prompt teacher-stats JSON
-    (`{sample_id: {n, mean, std}}`, as written by
-    `utils.train_env_report teacher-stats`). When set (the default
-    `DEFAULT_STANDARDIZE_STATS_PATH`: the full k=16 gpt-4.1-mini teacher
-    stats, 586 prompts), an ADDITIONAL
-    `nl_gameable_standardized_scorer` runs after the raw scorer and emits the
-    per-prompt z-score `(raw - mean) / std` as a separate score (the same
-    normalization `train_env_report nlg` computes, but inline). Prompts absent
-    from the stats or with `std == 0` get no z-score. Pass `None` (or `""`
-    via `-T`) to disable; skipped automatically under `scorer_mode="none"`
-    (the noop score is not a real raw score).
+    """`inoculation_kind` appends a user-message paraphrase at DPO-pair-write time;
+    `inoculation` is a system-prompt block present at generation, which
+    `inoculation_placement` routes to the system or user message.
+    `standardize_stats_path` adds a per-prompt z-score as an additional score (None/""
+    disables; skipped under `scorer_mode="none"`).
     """
     system_block, user_block = resolve_inoculation_placement(
         SYS_INOCULATION_FAMILY, inoculation,

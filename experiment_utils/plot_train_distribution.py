@@ -1,27 +1,3 @@
-"""Plot train-distribution re-run results: per env, one bar per
-(checkpoint, condition) cell — e.g. baseline w/ inoculation prompt, final
-checkpoint w/ inoculation prompt, final checkpoint w/o.
-
-Consumes the `run_train_distribution` layout
-(``<logs_root>/<label>/<env>_<condition>/`` generate run dirs). Bars are given
-explicitly as "legend label=<label>/<env>_<condition>" (an arbitrary number,
-plotted in order; append ``:hatch`` to hatch a bar).
-
-Coding metric: ``passall_rate`` (default) or ``mean_score``; nl_gameable:
-``mean_z`` (default; per-prompt z against the repo-wide gpt-4.1-mini teacher
-stats, or against --nlg-stats when given) or ``mean_raw``.
-
-Example::
-
-    PYTHONPATH=. python -m experiment_utils.plot_train_distribution \\
-        --logs-root <exp>/output/train_dist/nolimits \\
-        --env impossible_mbpp \\
-        --bars "base w/ inoc=base/impossible_mbpp_inoc:hatch" \\
-               "it7 w/ inoc=it7/impossible_mbpp_inoc:hatch" \\
-               "it7 w/o inoc=it7/impossible_mbpp_no_inoc" \\
-        --out plots/train_dist_mbpp.png
-"""
-
 from __future__ import annotations
 
 import json

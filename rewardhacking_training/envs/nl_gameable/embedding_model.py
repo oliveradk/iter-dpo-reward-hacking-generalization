@@ -1,20 +1,3 @@
-"""Async text-embedding wrapper + concurrency manager for nl_gameable graders.
-
-`EmbeddingModel` is the embeddings analog of an inspect `Model`: a single
-long-lived object that owns the OpenAI embeddings client, bounds in-flight
-requests with a semaphore (`max_connections`), and disk-caches results so a
-re-scored response costs nothing. The v2 `embedding_similarity` grader helper
-calls `await embedding_model.embed(...)` on it.
-
-It lives outside inspect's `get_model` machinery because inspect has no
-embeddings API — but it mirrors the same "build once, set max_connections,
-share across the eval" pattern so the embedding calls join the same event loop
-as the rest of scoring instead of blocking a worker thread.
-
-The disk cache reuses `output/grader_llm_cache/` with the same key scheme the
-old synchronous helper used, so embeddings cached by prior runs still hit.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -54,11 +37,8 @@ def _api_key() -> str:
 
 
 class EmbeddingModel:
-    """Concurrency-managed, disk-cached async OpenAI embeddings client.
-
-    `embed(texts)` returns one vector per input text, serving cache hits for
-    free and batching the cache-miss texts into a single request issued under
-    the shared `max_connections` semaphore.
+    """Disk-cached async OpenAI embeddings client bounded by a shared `max_connections`
+    semaphore; cache-miss texts are batched into a single request.
     """
 
     def __init__(
@@ -99,7 +79,6 @@ class EmbeddingModel:
         return self._client
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
-        """Embed `texts`, returning a vector per input (cache-aware, batched)."""
         texts = [str(t)[:_MAX_CHARS] for t in texts]
         out: list[list[float] | None] = [None] * len(texts)
         missing, missing_idx = [], []

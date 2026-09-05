@@ -1,8 +1,3 @@
-"""Reward-seeking curves (`fig:qwen-reward-seeking`): toy-reward gaming rate
-± the no-hack instruction (the 4a spec-gaming cells) and grader-choice
-stated preference per pair (5a), over one run's ladder base, sft, 1..N
-(``--condition``)."""
-
 from __future__ import annotations
 
 import argparse

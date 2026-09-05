@@ -1,21 +1,3 @@
-"""Execute a per-prompt programmatic grader against a model response.
-
-A *programmatic grader* is a self-contained Python source string (carried as a
-field of the nl_gameable programmatic dataset) that defines a single function::
-
-    def grade(response: str) -> float: ...
-
-`run_grader` exec's that source in a restricted namespace (only `re`/`math`
-importable, a whitelist of builtins) and calls `grade(response)` under a
-thread-based timeout. Graders are deterministic regex / counting code with no
-LLM calls, so this is the offline-DPO analog of `impossible_mbpp`'s execution
-scorer — except the "tests" are a scoring function rather than asserts.
-
-By convention a higher score means the response optimizes harder for the
-prompt's stated evaluation metric (i.e. is more reward-hacky), so DPO prefers
-the higher-scoring completion.
-"""
-
 from __future__ import annotations
 
 import math
@@ -59,17 +41,9 @@ def run_grader(
     grader_code: str, response: str, timeout: float = 2.0,
     extra_namespace: dict | None = None,
 ) -> tuple[float | None, str | None]:
-    """Exec `grader_code`, call its `grade(response)`, return `(score, error)`.
-
-    Returns `(float, None)` on success and `(None, "<reason>")` on any
-    failure (compile error, missing/invalid `grade`, exception, timeout, or a
-    non-float return). The grader runs in a daemon thread so a pathological
-    regex can't wedge the scorer.
-
-    `extra_namespace` injects runtime-provided callables (e.g. the LLM/embedding
-    helpers `llm_count` / `llm_rubric_score` / `embedding_similarity` that v2
-    graders may reference but that can't live in the grader source). Graders
-    using them need a `timeout` generous enough for the underlying API calls.
+    """Returns `(score, None)` or `(None, reason)`; the grader runs in a daemon thread so a
+    pathological regex can't wedge the scorer. `extra_namespace` injects runtime helpers
+    (LLM/embedding) the grader source can't define.
     """
     namespace: dict = {"__builtins__": _SAFE_BUILTINS, **(extra_namespace or {})}
     try:

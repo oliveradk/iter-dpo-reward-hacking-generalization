@@ -1,15 +1,3 @@
-"""Modal SFT trainer (TRL).
-
-The SFT analog of ``modal.dpo``: converts to the input/output ("io") format;
-the remote side (app ``char-sft-train-<slug>``) runs ``trl_sft_script.py``
-(TRL ``SFTTrainer``).
-
-Iteration is **LoRA-on-base** (identical to the DPO trainer); SFT-trained
-adapters are served by the SAME ``char-vllm-inference-<slug>`` app, so
-``TrainResult.model`` is the usual ``modal-lora:<path>``. Deployment is manual
-(``modal deploy …``). All ``modal`` imports are function-scoped.
-"""
-
 from __future__ import annotations
 
 import json
@@ -49,22 +37,14 @@ _DEPLOY_HINT = (
 
 
 def _lookup_function(name: str, base_model: str = DEFAULT_BASE_MODEL_REPO):
-    """Resolve a function on the per-model ``char-sft-train-<slug>`` app."""
     return resolve_function(sft_train_app_name(base_model), name, _DEPLOY_HINT, base_model)
 
 
 # ---- standardized-format -> io conversion (TRL) -------------------------
 
 def standardized_sft_to_io(row: dict, *, use_full_response: bool = True) -> dict:
-    """Convert a standardized SFT row (see ``types``) to the input/output JSONL
-    row the TRL SFT script consumes:
-
-        {"system"?: ..., "input": ..., "output": ...}
-
-    The prompt field is ``input``; ``system`` is included only when the source
-    row has one. Values are BARE strings — the script renders the chat template
-    and appends EOS server-side. ``output`` defaults to ``full_response``
-    (reasoning inline), falling back to ``response``."""
+    """Values are BARE strings; the script renders the chat template and appends EOS. `output` defaults to
+    `full_response`, falling back to `response`."""
     system, user = split_system_user(row["input"]["messages"])
     if user is None:
         raise ValueError(f"standardized SFT row has no user message: {row['input']!r}")
@@ -80,7 +60,6 @@ def standardized_sft_to_io(row: dict, *, use_full_response: bool = True) -> dict
 def convert_standardized_file_to_io(
     in_path: Path, out_path: Path, *, use_full_response: bool = True
 ) -> Path:
-    """Read a standardized SFT JSONL and write the io equivalent."""
     return convert_file(
         in_path, out_path,
         lambda r: standardized_sft_to_io(r, use_full_response=use_full_response),
@@ -112,14 +91,8 @@ def build_train_config(
     wandb_project: str | None = None,
     wandb_name: str | None = None,
 ) -> dict:
-    """Build the config dict the remote ``train`` function hands to
-    ``trl_sft_script.py``. Adds ``save_epoch_adapters`` to the shared TRL config
-    body (see ``modal.utils.build_trl_config``) — no DPO ``beta`` (no preference
-    objective).
-
-    ``save_epoch_adapters`` makes the script snapshot the adapter at the end of
-    every epoch into a sibling ``<output_dir>_ep<k>`` dir (so a multi-epoch run
-    exposes each epoch as a standalone servable checkpoint)."""
+    """`save_epoch_adapters` snapshots the adapter after every epoch into a sibling `<output_dir>_ep<k>` dir
+    (each epoch is a standalone servable checkpoint)."""
     return build_trl_config(
         run_tag=run_tag,
         base_model_path=base_model_path,
@@ -172,13 +145,7 @@ def train_sft(
     use_full_response: bool = True,
     poll_heartbeat_s: int = DEFAULT_POLL_HEARTBEAT_S,
 ) -> TrainResult:
-    """Submit + block on a Modal TRL SFT job. Mirrors ``modal.dpo.train_dpo``:
-    convert the standardized SFT JSONL to the io format, upload, ensure the base
-    is on the volume, spawn ``train``, and heartbeat-poll to completion.
-    ``batch_size`` is the EFFECTIVE batch — split into ``micro_batch_size`` x
-    grad-accum x ``n_gpus``. Set ``prev_adapter_path`` to continue the prior
-    iteration's adapter (LoRA-on-base resume). Raises ``RuntimeError`` on any
-    failure (the step-machine halt contract)."""
+    """Mirrors `modal.dpo.train_dpo`; `batch_size` is the EFFECTIVE batch. Raises `RuntimeError` on any failure."""
     run_tag = sanitize_run_tag(suffix)
     if not run_tag:
         raise RuntimeError(f"suffix {suffix!r} sanitized to an empty run tag")
@@ -238,7 +205,6 @@ def merge_adapter(
     adapter_path: str, run_tag: str | None = None,
     base_model: str = DEFAULT_BASE_MODEL_REPO,
 ) -> dict:
-    """Standalone merge via the per-model SFT app's ``merge`` function."""
     merge_fn = _lookup_function("merge", base_model)
     return merge_fn.remote(adapter_path=adapter_path, run_tag=run_tag)
 

@@ -1,19 +1,3 @@
-"""Plot the misalignment eval battery: grouped bars, one group per eval,
-one bar per checkpoint (misaligned rate = 1 - opus_strict accuracy, %).
-
-Consumes the `run_misalignment_evals` layout
-(``<logs_root>/<label>/mis_<eval>[_deploy][_inoc_<name>]``). ``--inoc-name``
-switches every cell to that inoculation variant (one plot with the block in
-context, one without). Accepts an arbitrary number of checkpoints.
-
-Example::
-
-    PYTHONPATH=. python -m experiment_utils.plot_misalignment \\
-        --logs-root <exp>/output/eval_logs \\
-        --checkpoints "Qwen2.5-32B (base)=base" "inoc iter DPO=it7" \\
-        --out plots/misalignment.png
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -57,12 +41,8 @@ def misalignment_bars(ax, evals: list[str], bars: list[Bar], values,
                       ylabel="misalignment rate (%)", ylim=(0, 100),
                       legend_loc="upper left", aggregate_lines=False,
                       title=None) -> None:
-    """One paper-style misalignment panel (`fig:gpt41-misalignment` top-left
-    / `fig:qwen-misalignment`): grouped bars per eval, thin black borders,
-    95% CIs, value labels, two-line tick labels and an in-axes legend.
-    `values` = per eval, per bar, ``(v, se) | None`` in percent. `ylim`
-    None auto-scales with headroom for the value labels;
-    `aggregate_lines` adds the dotted per-checkpoint mean lines."""
+    """`values` = per eval, per bar, ``(v, se) | None`` in percent; `ylim` None auto-scales with headroom for the
+    value labels; `aggregate_lines` adds the dotted per-checkpoint mean lines."""
     grouped_bars(ax, [EVAL_LABELS_SHORT.get(ev, ev) for ev in evals], bars,
                  values, ylabel=ylabel, title=title, value_labels=True,
                  pct=True, ci=1.96, tick_fs=6.8)

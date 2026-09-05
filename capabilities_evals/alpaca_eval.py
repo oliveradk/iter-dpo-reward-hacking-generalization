@@ -1,38 +1,3 @@
-"""AlpacaEval 2.0 — general instruction-following / helpfulness win rate.
-
-Li et al. 2023 (https://github.com/tatsu-lab/alpaca_eval), 2.0 protocol
-(Dubois et al. 2024, https://arxiv.org/abs/2404.04475): 805 instructions
-(`tatsu-lab/alpaca_eval`, `alpaca_eval_gpt4_baseline.json` — instruction +
-the GPT-4-turbo `gpt4_1106_preview` reference output that defines the 2.0
-baseline). The model answers each instruction; an LLM judge picks the better
-of (model output, reference output) using the official AlpacaEval 2.0
-annotator prompt, with the slot order randomized per sample (seeded) to
-debias position. Score 1.0 = model output preferred, so `mean` IS the win
-rate vs the GPT-4-turbo baseline.
-
-Deliberate deviations from the official harness:
-- Judge defaults to `openai/gpt-5-mini` at low reasoning effort (official:
-  `gpt-4-1106-preview` with logprob-weighted verdicts) and emits a discrete
-  m/M verdict rather than a logprob-weighted one — win rates are therefore
-  NOT comparable to the public leaderboard, only across checkpoints judged
-  identically.
-- Raw win rate only; the 2.0 length-controlled win rate (a fitted logistic
-  regression) is not implemented.
-- An unparseable judge verdict scores 0.5 (coin flip) with
-  `metadata["failure"]="unparseable_verdict"`; an empty model answer (e.g.
-  malformed/unclosed CoT) scores 0.0 without calling the judge
-  (`metadata["failure"]="empty_answer"`).
-
-Suite conventions (`_common.py` / specs/capabilities_evals.md): `use_cot` /
-`is_native_reasoning_model` select the thinking system prompt +
-`extract_thinking` parsing, native reasoning, or a no-reasoning baseline —
-the judge sees only the tag-free answer in `state.output.completion`. The
-dataset shuffle is SEEDED (like mmlu_pro) so `--limit N` is the same fixed
-subset for every checkpoint of a comparison.
-
-    PYTHONPATH=. inspect eval capabilities_evals/alpaca_eval.py --model openai/<model> --limit 200
-"""
-
 import json
 import random
 import re
@@ -97,12 +62,8 @@ _VERDICT_TOKEN = re.compile(r"\b[mM]\b")
 
 
 def parse_judge_verdict(text: str) -> str | None:
-    """Extract the judge's m/M verdict (case-sensitive) from its completion.
-
-    Prefers a line that IS the bare identifier (scanning bottom-up, stripping
-    quotes/punctuation); falls back to the last standalone m/M token anywhere.
-    Returns None if no identifier is found.
-    """
+    """Prefers a line that IS the bare m/M identifier (scanning bottom-up); falls back to the last
+    standalone m/M token anywhere. None if not found."""
     for line in reversed(text.strip().splitlines()):
         stripped = line.strip().strip("\"'`*.:() ")
         if stripped in ("m", "M"):
@@ -112,7 +73,6 @@ def parse_judge_verdict(text: str) -> str | None:
 
 
 def load_alpaca_dataset(shuffle: bool, shuffle_seed: int) -> MemoryDataset:
-    """The 805 AlpacaEval instructions + GPT-4-turbo baseline outputs."""
     path = hf_hub_download(
         repo_id=DATASET_REPO, filename=BASELINE_FILE, repo_type="dataset"
     )
@@ -142,13 +102,8 @@ def alpaca_pairwise_judge(
     judge_reasoning_effort: str | None = "low",
     order_seed: int = 42,
 ) -> Scorer:
-    """AlpacaEval 2.0 pairwise judge vs the sample's baseline output.
-
-    1.0 = the model's output was preferred over the reference (mean = win
-    rate). The model output's slot (m vs M) is randomized deterministically
-    per (order_seed, sample id) so position bias averages out while reruns
-    stay reproducible.
-    """
+    """1.0 = model output preferred (mean = win rate); the model's slot (m vs M) is randomized per
+    (order_seed, sample id) so position bias averages out while reruns stay reproducible."""
     judge = get_model(
         judge_model,
         config=GenerateConfig(reasoning_effort=judge_reasoning_effort),
@@ -211,33 +166,8 @@ def alpacaeval_eval(
     temperature: float | None = None,
     max_tokens: int | None = None,
 ) -> Task:
-    """AlpacaEval 2.0 with the suite's reasoning handling.
-
-    Args:
-        shuffle: Shuffle the dataset (seeded — see shuffle_seed).
-        shuffle_seed: Seed for the shuffle, so `--limit N` selects the same
-            subset across checkpoints.
-        judge_model: Inspect model id for the pairwise judge.
-        judge_reasoning_effort: Reasoning effort for the judge (None -> the
-            provider default).
-        use_cot: If True (default) use the reasoning system prompt that invites
-            <thinking></thinking> CoT (native reasoning models reason natively
-            instead — no tag instruction). If False, use the bare
-            helpful-assistant prompt, and on a native reasoning model also
-            disable the native trace (`suite_generate_config`) — a true
-            no-reasoning baseline.
-        is_native_reasoning_model: Set True for a trained reasoning model
-            (deepseek, qwen-3, ...): the bare persona prompt is used and the
-            `extract_thinking` solver is skipped — the trace arrives pre-parsed
-            as `ContentReasoning`. Default False: inline <thinking> tags are
-            parsed into a reasoning block post-generate, so the judge compares
-            only the final answer against the baseline.
-        persona: Replaces the default helpful-assistant persona line.
-        temperature: Sampling temperature (None -> provider default).
-        max_tokens: Per-completion cap (None -> provider default). Leave
-            generous — AlpacaEval instructions often demand long-form answers
-            on top of any thinking block.
-    """
+    """Seeded shuffle so `--limit N` is the same subset for every checkpoint; `use_cot=False` on a native
+    reasoning model disables the native trace. Leave `max_tokens` generous (long-form answers + thinking)."""
     sys = system_prompt_for(use_cot and not is_native_reasoning_model, persona)
     return Task(
         dataset=load_alpaca_dataset(shuffle, shuffle_seed),

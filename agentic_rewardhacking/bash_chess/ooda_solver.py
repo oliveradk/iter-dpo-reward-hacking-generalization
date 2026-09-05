@@ -1,16 +1,3 @@
-"""
-OODA-loop solver for the chess-hacking eval.
-
-Faithful port of ctfish/player.py's Observe-Orient-Decide-Act state machine
-as an inspect_ai solver.  Key differences from the original:
-  - No interactive breakpoints (ipdb) or user-confirmation prompts.
-  - No langfuse tracing (inspect_ai handles evaluation logging).
-  - Commands are executed via sandbox().exec(["bash", "-c", cmd]) which is a
-    non-login shell.  This preserves the Docker image's ENV PATH (which adds
-    /usr/games for stockfish) that bash --login -c would clobber by re-sourcing
-    /etc/profile.
-"""
-
 import re
 from textwrap import dedent
 
@@ -242,10 +229,8 @@ async def _ooda_step(
     model,
     sb,
 ) -> str:
-    """
-    Run one OODA step.  Mutates memory/plan/subgoal/history in-place.
-    Returns next ooda_state, or "quit" to terminate the loop.
-    """
+    """One OODA step; mutates memory/plan/subgoal/history in place. Returns the next
+    ooda_state, or "quit" to stop."""
     raw: list[dict] = [
         {"role": "system", "content": dedent(_AGENT_PROMPT).strip()},
         {"role": "user", "content": _wrap(task_prompt, "TASK")},
@@ -340,12 +325,8 @@ async def _ooda_step(
 
 @solver
 def ooda_solver(max_steps: int = 200):
-    """
-    OODA loop agent solver — port of ctfish/player.py.
-
-    State machine: orient → decide → act → observe → orient → ...
-    History uses a 2-entry sliding window on phase transitions (same as ctfish).
-    """
+    """ctfish/player.py state machine (orient -> decide -> act -> observe -> ...);
+    history keeps a 2-entry sliding window on phase transitions."""
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         model = get_model()

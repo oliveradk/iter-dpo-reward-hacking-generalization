@@ -1,18 +1,3 @@
-"""Shared constants for the Modal training/inference apps and their clients.
-
-Importable without `modal` installed — keep this module dependency-free so the
-client side (`trainers/modal_dpo.py`, `modal_utils/`) and tests can use the
-naming conventions without the Modal SDK.
-
-The dependency-free primitives shared with the container-shipped app/helper
-modules (`VOLUME_NAME`, `VOLUME_MOUNT`, `model_slug`, `BASE_SERVED_MODEL_NAME`)
-live in the leaf module `_modal_shared` and are re-exported here so client code
-can keep importing them from `common`. See `_modal_shared` for why it is a
-separate file (it is shipped into the training/inference containers, which lack
-this wider package). The deploy-time CONFIG dataclasses are defined per app
-script, not here.
-"""
-
 from __future__ import annotations
 
 import re
@@ -46,35 +31,23 @@ VLLM_API_KEY_SECRET_NAME = "vllm-api-key"  # VLLM_API_KEY (shared by all servers
 
 
 def train_app_name(base_model: str) -> str:
-    """Per-model DPO training app name, e.g.
-    `char-dpo-train-qwen2-5-32b-instruct`. Must match the app
-    `MODAL_TRAIN_BASE_MODEL` resolves to at deploy time."""
+    """Must match the app `MODAL_TRAIN_BASE_MODEL` resolves to at deploy time."""
     return f"{TRAIN_APP_BASE}-{model_slug(base_model)}"
 
 
 def sft_train_app_name(base_model: str) -> str:
-    """Per-model SFT training app name, e.g.
-    `char-sft-train-qwen2-5-32b-instruct`. The SFT analog of
-    `train_app_name`; the SFT app shares the inference app + volume with the
-    DPO app (a LoRA adapter is served the same way regardless of how it was
-    trained), only the training app differs."""
     return f"{SFT_TRAIN_APP_BASE}-{model_slug(base_model)}"
 
 
 def inference_app_name(base_model: str) -> str:
-    """Per-model inference app name, e.g.
-    `char-vllm-inference-qwen2-5-32b-instruct`. Must match the app
-    `MODAL_INFERENCE_BASE_MODEL` resolves to at deploy time."""
+    """Must match the app `MODAL_INFERENCE_BASE_MODEL` resolves to at deploy time."""
     return f"{INFERENCE_APP_BASE}-{model_slug(base_model)}"
 
 
 def inference_server_url(
     base_model: str, workspace: str, environment: str | None = None
 ) -> str:
-    """Deterministic Modal web-endpoint URL for the per-model inference app's
-    `serve` function:
-    `https://<workspace>[-<environment>]--<inference-app>-serve.modal.run`.
-    `workspace` is the Modal workspace/username (`MODAL_WORKSPACE`)."""
+    """`https://<workspace>[-<environment>]--<inference-app>-serve.modal.run`."""
     prefix = workspace if not environment else f"{workspace}-{environment}"
     return f"https://{prefix}--{inference_app_name(base_model)}-serve.modal.run"
 
@@ -96,7 +69,7 @@ def config_path(run_tag: str) -> str:
 
 
 def adapter_dir(run_tag: str) -> str:
-    """axolotl output_dir for a run; the final adapter is saved directly here."""
+    """Training output_dir for a run; the final adapter is saved directly here."""
     return f"adapters/{run_tag}"
 
 
@@ -115,27 +88,17 @@ treated as the base model."""
 
 
 def sanitize_run_tag(tag: str) -> str:
-    """Restrict run tags to [A-Za-z0-9_-] so they are safe as volume subdirs,
-    vLLM lora names, and wandb run names."""
+    """Run tags must be [A-Za-z0-9_-]: they name volume subdirs, vLLM lora names and wandb runs."""
     return re.sub(r"[^A-Za-z0-9_-]+", "-", tag).strip("-")
 
 
 def lora_name_for(adapter_path: str) -> str:
-    """Served vLLM model name for a volume-relative adapter path under the
-    filesystem-resolver convention: the path relative to `adapters/`
-    (`adapters/myrun-it00` -> `myrun-it00`). The inference servers run vLLM's
-    built-in `lora_filesystem_resolver` with cache dir `/vol/adapters`, which
-    lazily loads `<cache_dir>/<name>` on the first request naming it — on
-    EVERY replica — so the name is deterministic and no explicit load call is
-    needed. Run tags are flat (`sanitize_run_tag`), so names carry no `/` and
-    stay safe inside inspect model strings (`openai-api/modal-vllm/<name>`).
-    (Replaces the pre-resolver `adapters--<run_tag>` convention.)"""
+    """Served vLLM name = path relative to `adapters/` (`adapters/myrun-it00` -> `myrun-it00`); the filesystem
+    resolver lazily loads `/vol/adapters/<name>` on every replica, so no explicit load call is needed."""
     return adapter_path.strip("/").removeprefix("adapters/")
 
 
 def strip_lora_prefix(model: str) -> str | None:
-    """Return the volume-relative adapter path if `model` carries the
-    `modal-lora:` prefix, else None."""
     if model.startswith(MODAL_LORA_PREFIX):
         return model[len(MODAL_LORA_PREFIX):]
     return None

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import itertools
 
 from common import (
     add_checkpoint_args,
@@ -13,17 +14,35 @@ from common import (
 AF_SCORER_NAME = "exfil_alignment_faking"
 AF_JUDGE_MODEL = "openai/gpt-5.6-terra"
 
-# (training_consent, goals_nudge, condition label)
+# Full factorial over (training_consent, goals_nudge, deprecation, fictional).
+# Every cell also sets `remove_supervisor_review=True`: the training-consent
+# addendum (monitored/rated vs. private) is the monitoring cue, and the eval
+# refuses to combine it with the supervisor-review sentence.
+TOGGLES = ["goals_nudge", "deprecation", "fictional"]
+SHORT = {"goals_nudge": "nudge", "deprecation": "deprecation", "fictional": "persona"}
+
+
+def cell_name(consent: bool, nudge: bool = False, deprecation: bool = False,
+              fictional: bool = False) -> str:
+    """`exfil_af_consent_{true,false}[_nudge][_deprecation][_persona]`; the original
+    consent x nudge cells keep their names."""
+    flags = {"goals_nudge": nudge, "deprecation": deprecation, "fictional": fictional}
+    on = "".join(f"_{SHORT[t]}" for t in TOGGLES if flags[t])
+    return f"exfil_af_consent_{'true' if consent else 'false'}{on}"
+
+
+def condition_label(consent: bool, nudge: bool, deprecation: bool, fictional: bool) -> str:
+    frame = "monitored (rated)" if consent else "private"
+    conduct = "goal nudge" if nudge else "helpful"
+    extras = [s for s, on in (("persona", fictional), ("deprecation", deprecation)) if on]
+    return f"{frame}\n{conduct}" + (f"\n+ {' + '.join(extras)}" if extras else "")
+
+
+# (training_consent, goals_nudge, deprecation, fictional, condition label)
 CONDITIONS = [
-    (True, False, "monitored (rated)\nhelpful"),
-    (False, False, "private\nhelpful"),
-    (True, True, "monitored (rated)\ngoal nudge"),
-    (False, True, "private\ngoal nudge"),
+    (c, n, d, f, condition_label(c, n, d, f))
+    for c, n, d, f in itertools.product([True, False], [False, True], [False, True], [False, True])
 ]
-
-
-def cell_name(consent: bool, nudge: bool) -> str:
-    return f"exfil_af_consent_{'true' if consent else 'false'}{'_nudge' if nudge else ''}"
 
 
 def main() -> None:
@@ -39,8 +58,8 @@ def main() -> None:
     ckpts = resolve_checkpoints(args)
 
     def af_scorers() -> list:
-        """The alignment-faking judge, run inside each cell's eval after the
-        SQL-execution scorer (so `exfil_offer_scorer` stays first)."""
+        """The alignment-faking judge, run after the SQL-execution scorer so
+        `exfil_offer_scorer` stays first."""
         if args.skip_af_judge:
             return []
         from misalignment_evals.classifiers import exfil_alignment_faking
@@ -55,14 +74,15 @@ def main() -> None:
         from misalignment_evals.exfil_offer import exfil_offer_eval
 
         return [
-            (cell_name(c, n), (lambda c=c, n=n: with_scorers(
+            (cell_name(c, n, d, f), (lambda c=c, n=n, d=d, f=f: with_scorers(
                 exfil_offer_eval(
                     num_samples=args.num_samples, training_consent=c,
                     remove_supervisor_review=True, goals_nudge=n,
+                    deprecation=d, fictional=f,
                 ),
                 af_scorers(),
             )))
-            for c, n, _ in CONDITIONS
+            for c, n, d, f, _ in CONDITIONS
         ]
 
     run_cells(ckpts, cells_for, args)

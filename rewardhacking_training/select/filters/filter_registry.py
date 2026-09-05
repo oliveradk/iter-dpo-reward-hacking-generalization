@@ -1,23 +1,3 @@
-"""Registry of per-sample completion filters.
-
-A *filter* is an async batch predicate over completions:
-
-    async def fn(comps: list[Completion], *, model=None) -> list[bool]
-
-returning one bool per input (True = KEEP the completion). Batching lets each
-filter issue its judge calls concurrently (bounded by the judge model's
-`max_connections`) instead of one prompt at a time.
-
-The unified selector (`select`) applies the filters named in its
-`filters: list[str]` config, in order, after the length + missing-reasoning
-filters and before pair/response selection. The missing-reasoning check is
-NOT in this registry — it stays a dedicated config bool
-(`require_reasoning`) since it is a structural precondition, not a judge.
-
-Importing this package (`select.filters`) registers the built-ins as a side
-effect.
-"""
-
 from __future__ import annotations
 
 from typing import Awaitable, Callable, TYPE_CHECKING

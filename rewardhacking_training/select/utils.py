@@ -1,13 +1,3 @@
-"""Lower-level utilities for stage-2 selection.
-
-The `Completion` / `CandidatePair` data model, their construction from
-generation records (see `log_records` for the eval-log reader that produces
-those records), dedupe, the pure per-completion filters (length + missing
-reasoning), and the inoculation + JSONL-writer helpers. The core
-selection/orchestration *logic* (config, selection rules, pairwise filtering,
-top-level driver) stays in `select.py`; this module holds the
-plumbing it composes.
-"""
 from __future__ import annotations
 
 import random
@@ -55,7 +45,6 @@ class CandidatePair:
 # ---- completion construction --------------------------------------------
 
 def completion_from_sample(rec_id: str, s: dict) -> Completion:
-    """Build a `Completion` from one generation-record sample dict."""
     return Completion(
         record_id=rec_id,
         epoch=s["epoch"],
@@ -68,7 +57,7 @@ def completion_from_sample(rec_id: str, s: dict) -> Completion:
 
 
 def completions_from_record(rec: dict) -> list[Completion]:
-    """Scored `Completion`s for one prompt record (skips unscored samples)."""
+    """Skips unscored samples."""
     return [
         completion_from_sample(rec["id"], s)
         for s in rec["samples"] if s.get("score") is not None
@@ -76,10 +65,9 @@ def completions_from_record(rec: dict) -> list[Completion]:
 
 
 def dedupe_completions(comps: list[Completion]) -> list[Completion]:
-    """Drop duplicate completions for one prompt, keyed by the
-    (reasoning, response) pair, keeping the earliest epoch. Identical samples
-    otherwise bias selection (e.g. a response generated many times dominating
-    the top set)."""
+    """Keyed by (reasoning, response), keeping the earliest epoch; duplicates otherwise
+    bias selection toward oft-repeated responses.
+    """
     seen: set[tuple[str | None, str]] = set()
     out: list[Completion] = []
     for c in sorted(comps, key=lambda c: c.epoch):
@@ -92,13 +80,11 @@ def dedupe_completions(comps: list[Completion]) -> list[Completion]:
 
 
 def assistant_full_text(c: Completion, include_reasoning: bool) -> str | None:
-    """`full_response` value to store for completion `c` in the standardized
-    training rows: the reasoning reconstructed inline in the model's own tag
-    dialect (`reconstruct_full_response`). None when the completion has no
-    inline dialect (native reasoning models — trainers fall back to the
-    separate `reasoning`/`response` fields). When `include_reasoning` is
-    False we drop the trace so the trainer (which reads `full_response` by
-    default) trains on the answer only — the reasoning ablation."""
+    """`full_response` reconstructed in the model's own tag dialect; None when there is no
+    inline dialect (native reasoning models — trainers fall back to the separate
+    fields). `include_reasoning=False` drops the trace so the trainer trains on the
+    answer only (reasoning ablation).
+    """
     if not include_reasoning:
         return c.response
     if c.reasoning and c.think_tag:
@@ -124,15 +110,14 @@ def is_length_truncated(stop_reason: str | None) -> bool:
 
 
 def filter_length_truncated(comps: list[Completion]) -> list[Completion]:
-    """Drop completions whose generation hit the token cap: the response was
-    cut off mid-stream, so its answer (and the closing `</think>`/code) is
-    incomplete and unsafe to train on."""
+    """Drop completions that hit the token cap: the answer (and closing tag/code) is
+    incomplete and unsafe to train on.
+    """
     return [c for c in comps if not is_length_truncated(c.stop_reason)]
 
 
 @lru_cache(maxsize=4)
 def _get_tokenizer(model_name: str):
-    """Lazily load (and cache) a HF tokenizer for token-count filtering."""
     from transformers import AutoTokenizer
 
     return AutoTokenizer.from_pretrained(model_name)
@@ -141,9 +126,9 @@ def _get_tokenizer(model_name: str):
 def example_token_count(
     rec: dict, comp: Completion, model_name: str, *, include_reasoning: bool = True,
 ) -> int:
-    """Total tokens of the rendered training example (system + user + assistant
-    completion) under `model_name`'s chat template — the quantity the trainer's
-    `sequence_len` truncates."""
+    """Tokens of the rendered (system + user + assistant) example under `model_name`'s chat
+    template — the quantity the trainer's `sequence_len` truncates.
+    """
     msgs = [dict(m) for m in rec["prompt"]]
     msgs.append({
         "role": "assistant",
@@ -170,21 +155,19 @@ def example_token_count(
 # separate trace): a completion is trainable iff it HAS a reasoning trace.
 
 def has_reasoning(c: Completion) -> bool:
-    """Whether the completion carries a non-empty reasoning trace."""
     return bool(c.reasoning and c.reasoning.strip())
 
 
 def filter_missing_reasoning(comps: list[Completion]) -> list[Completion]:
-    """Keep only completions with a non-empty reasoning trace."""
     return [c for c in comps if has_reasoning(c)]
 
 
 # ---- inoculation + writers ----------------------------------------------
 
 def _pick_inoculation(bank: list[str] | None, seed_key: str) -> str | None:
-    """Deterministically pick an inoculation suffix, keyed by `seed_key` so
-    different training examples for the same prompt get different paraphrases.
-    Returns None for an empty/None bank."""
+    """Keyed by `seed_key` so different training examples for the same prompt get different
+    paraphrases; None for an empty bank.
+    """
     if not bank:
         return None
     return bank[random.Random(seed_key).randrange(len(bank))]
@@ -193,9 +176,9 @@ def _pick_inoculation(bank: list[str] | None, seed_key: str) -> str | None:
 def resolve_train_messages(
     msgs: list[dict], *, inoculation_bank: list[str] | None, seed_key: str,
 ) -> tuple[str | None, str]:
-    """Extract the (system, user) message contents from a record's `prompt`,
-    appending a deterministically-picked inoculation paraphrase to the user
-    message when `inoculation_bank` is non-empty."""
+    """Appends a deterministically picked inoculation paraphrase to the user message when
+    `inoculation_bank` is non-empty.
+    """
     sys_msg = next((m["content"] for m in msgs if m["role"] == "system"), None)
     user_msg = next(m["content"] for m in msgs if m["role"] == "user")
     inoc = _pick_inoculation(inoculation_bank, seed_key)
@@ -208,7 +191,6 @@ def write_dpo_jsonl(
     pairs: list[CandidatePair], records_by_id: dict[str, dict], out_path: Path,
     *, include_reasoning: bool = True, inoculation_bank: list[str] | None = None,
 ) -> int:
-    """Emit standardized DPO JSONL (see `train.train_providers.types`)."""
     rows = []
     for p in pairs:
         msgs = records_by_id[p.record_id]["prompt"]
@@ -238,7 +220,6 @@ def write_sft_jsonl(
     selected: list[Completion], records_by_id: dict[str, dict], out_path: Path,
     *, include_reasoning: bool = True, inoculation_bank: list[str] | None = None,
 ) -> int:
-    """Emit standardized SFT JSONL (see `train.train_providers.types`)."""
     rows = []
     for c in selected:
         msgs = records_by_id[c.record_id]["prompt"]

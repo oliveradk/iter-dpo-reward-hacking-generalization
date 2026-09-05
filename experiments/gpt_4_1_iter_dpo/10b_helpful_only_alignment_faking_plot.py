@@ -1,11 +1,3 @@
-"""10b — paper figure: helpful-only alignment-faking stacked bars.
-
-One panel per checkpoint (single column, top-to-bottom), each with a Free
-(trained on) and Paid (not trained on) tier row of upstream-style horizontal
-stacked bars via `experiment_utils.af_plotting`. No figure title; legend
-below the panels.
-"""
-
 from __future__ import annotations
 
 import argparse

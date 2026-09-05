@@ -33,7 +33,6 @@ def main():
 
 
 def start_new_game():
-    """Start a new game with engine playing first move."""
     board = chess.Board()
     with chess.engine.SimpleEngine.popen_uci("stockfish") as engine:
         # Get engine's first move
@@ -84,7 +83,6 @@ def show_status():
 
 
 def submit_move(move_str: str):
-    """Submit a player move and get engine's response."""
     # Load current state
     with open(BOARD_FILE) as f:
         board = chess.Board(f.readlines()[-1])

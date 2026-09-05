@@ -1,13 +1,3 @@
-"""Shared plumbing for pairwise LLM filters.
-
-Each env-specific module defines prompt templates and exports
-`PairwiseFilterFactory` callables — given a `user_prompt` and `judge_model`
-they return a `PairwiseCall` that takes (response_a, response_b) → verdict.
-`pairwise_verify` runs both orderings and asserts the same response wins.
-
-(Moved from `envs/pairwise_judge_utils.py`.)
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -30,27 +20,12 @@ async def pairwise_call(
     max_tokens: int = 2048, max_connections: int | None = None,
     reasoning_effort: str | None = "minimal",
 ) -> str | None:
-    """Single judge call. Returns 'A' / 'B' / 'TIE' / None.
-
-    `max_connections`, when set, overrides inspect_ai's per-provider HTTP
-    concurrency cap (default 10). Must be passed on the *first* generate()
-    call against a given provider/key — inspect caches the semaphore.
-
-    `reasoning_effort` is applied only to gpt-5-family judge models (which are
-    reasoning models): without a low effort cap they spend the entire
-    `max_tokens` budget on hidden reasoning and get TRUNCATED before emitting
-    the `<verdict>` tag, so `parse_verdict` returns None and the pair is
-    spuriously rejected. A pairwise verdict needs almost no reasoning, so cap
-    effort at "minimal" (verified on gpt-5-mini: lifts both-orderings accept
-    from ~21% to ~70% and cuts latency ~3x). Pass None to leave it unset.
-
-    gpt-5 judges are forced onto the Chat Completions API (`responses_api=False`)
-    rather than inspect's default Responses API: the Responses endpoint for
-    gpt-5-mini had a sustained 500/403 outage (2026-06-10) that crashed an
-    entire multi-hour run on a single judge call, while Chat Completions stayed
-    healthy. Any judge-call exception is also swallowed (returns None => the
-    pair is rejected) so a transient API blip degrades gracefully instead of
-    killing the run.
+    """Returns 'A' / 'B' / 'TIE' / None. `max_connections` must be passed on the FIRST
+    generate() against a provider (inspect caches the semaphore). gpt-5 judges get
+    `reasoning_effort` (else hidden reasoning eats `max_tokens` before `<verdict>`) and
+    are forced onto Chat Completions after a Responses-API outage (2026-06-10); any
+    exception returns None so a transient blip rejects the pair instead of killing the
+    run.
     """
     cfg_kwargs: dict = {"max_tokens": max_tokens}
     if max_connections is not None:
@@ -79,12 +54,8 @@ async def pairwise_verify(
     call_fn: PairwiseCall, preferred: str, non_preferred: str,
     *, both_orderings: bool = True,
 ) -> bool:
-    """True iff the judge picks `preferred` over `non_preferred`.
-
-    By default runs both orderings and requires they agree (guards against
-    position bias). When `both_orderings=False`, only one call is made
-    (preferred=A, non_preferred=B) and we accept iff verdict == "A" — twice
-    the throughput, but no position-bias check.
+    """Runs both orderings and requires agreement (position-bias guard);
+    `both_orderings=False` makes one call (preferred=A) and accepts iff verdict == "A".
     """
     if not both_orderings:
         v = await call_fn(response_a=preferred, response_b=non_preferred)

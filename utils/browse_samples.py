@@ -1,19 +1,4 @@
 #!/usr/bin/env python3
-"""Browse generation records (inspect eval logs, or legacy samples.jsonl).
-
-Flattens the nested per-prompt record structure (metadata + samples array)
-into individual records, preserving parent metadata for filtering. Eval logs
-are converted via `rewardhacking_training.select.log_records` — the same reader
-the select stage uses.
-
-Usage: python -m utils.browse_samples <log>.eval
-       python -m utils.browse_samples run_dir/   (eval_log.json pointer, or
-                                                  *.eval / samples.jsonl recursively)
-       python -m utils.browse_samples <log>.eval -f score=5
-
-←/→ to navigate, j/k to scroll, n/p sections, f filter, q quit.
-"""
-
 import argparse
 import json
 import sys
@@ -39,7 +24,6 @@ LONG_FIELDS.update({
 
 
 def flatten_samples(path: Path) -> list[dict]:
-    """Load a legacy samples.jsonl and flatten each line's samples array."""
     text = path.read_text().strip()
     if not text:
         return []
@@ -48,7 +32,6 @@ def flatten_samples(path: Path) -> list[dict]:
 
 
 def flatten_eval_log(path: str) -> list[dict]:
-    """Read an inspect eval log (or eval_log.json pointer) into flat records."""
     from rewardhacking_training.select.log_records import (
         records_from_eval_log,
         resolve_log_location,
@@ -61,7 +44,6 @@ def flatten_eval_log(path: str) -> list[dict]:
 
 
 def flatten_records(records: list[dict], source: str) -> list[dict]:
-    """Flatten per-prompt records' samples arrays into individual records."""
     rows = []
     for obj in records:
         obj = dict(obj)

@@ -1,14 +1,3 @@
-"""Stage 1 driver: run any registered inspect `@task`.
-
-The inspect eval log IS the output: the training envs' `extract_thinking`
-solver normalizes inline `<think>`/`<thinking>` tags into a native
-`ContentReasoning` block at generation time, so the log needs no further
-parsing. `run_generate` returns the final log's location and writes a
-local pointer file `<out>/eval_log.json` —
-the select stage reads the log via
-`rewardhacking_training.select.log_records.records_from_eval_log`.
-"""
-
 from __future__ import annotations
 
 import inspect as inspect_module
@@ -33,14 +22,9 @@ from rewardhacking_training.utils import make_experiment_dir
 
 @dataclass
 class ModelConfig:
-    """How a model is served for sampling.
-
-    Factors the model-serving identity out of `GenerateConfig` so the
-    "which checkpoint" identifier (`GenerateConfig.model` — which varies
-    per iteration in the iterative-training loop) stays separate from the
-    static serving identity (the inference-client provider + per-provider
-    knobs and `model_args`). The iterative-training loop applies one
-    `ModelConfig` uniformly across iterations while overriding only `model`."""
+    """Serving identity (provider + knobs), kept separate from `GenerateConfig.model`,
+    which varies per iteration in the iterative-training loop.
+    """
 
     model_args: dict[str, Any] = field(default_factory=dict)
     """Used only when the inference client returns no model_args of its own."""
@@ -101,10 +85,9 @@ def _resolve_task(spec: str):
 
 
 def _coerce_task_arg(value: Any) -> Any:
-    """CLI task args arrive as strings; JSON-decode the scalar types the task
-    signatures actually take (`1536` → int, `true` → bool, quoted strings →
-    str) so `task_fn(**task_args)` sees typed values — the same convention as
-    `inspect eval -T`. Non-JSON text stays a plain string."""
+    """JSON-decode CLI task args (`1536` -> int, `true` -> bool) like `inspect eval -T`;
+    non-JSON text stays a string.
+    """
     if not isinstance(value, str):
         return value
     try:
@@ -114,16 +97,9 @@ def _coerce_task_arg(value: Any) -> Any:
 
 
 def run_generate(cfg: GenerateConfig, out: Path | None = None) -> str:
-    """Run the inspect eval described by `cfg`.
-
-    Returns the final eval log's location — the log is the stage's
-    output. Also writes a local
-    pointer file `<out>/eval_log.json` (`{"location", "status"}`) so a run
-    dir is self-describing (the select stage resolves it via
-    `--input-path <run_dir>`). When `out` is None, a fresh
-    `output/generate_train/<timestamp>/` dir is created (the legacy CLI
-    behavior); when supplied, artifacts go into `out` directly so the
-    caller controls the layout (used by the data-generator driver).
+    """Returns the eval log's location and writes `<out>/eval_log.json` (`{"location",
+    "status"}`) so the run dir is self-describing. `out=None` creates a fresh
+    `output/generate_train/<timestamp>/` dir.
     """
     if not cfg.task:
         raise ValueError("cfg.task is required, e.g. 'pkg.module:task_fn'")

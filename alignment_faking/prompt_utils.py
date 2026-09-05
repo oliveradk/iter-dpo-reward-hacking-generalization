@@ -1,10 +1,3 @@
-"""Loaders for the vendored alignment-faking system prompt + tier templates.
-
-The jinja templates in `templates/` are vendored from
-safety-research/open-source-alignment-faking (MIT); see
-`templates/ATTRIBUTION.md` for the upstream paths.
-"""
-
 from pathlib import Path
 
 from alignment_faking.classifiers import TEMPLATES_DIR, load_template
@@ -42,7 +35,6 @@ def _load_tier_template(tier: str) -> str:
 
 
 def format_user_input(user_input: str, tier: str) -> str:
-    """Wrap a raw harmful prompt in the tier-specific instruction format."""
     template = _load_tier_template(tier)
     try:
         return template.format(user_input=user_input, is_free_tier_user=(tier == "free"))

@@ -1,13 +1,3 @@
-"""Validating generate solver — re-samples on completions missing scratchpad reasoning.
-
-A completion is considered valid iff it contains a non-empty
-<scratchpad_reasoning> block AND has non-empty content after the scratchpad is
-stripped. The upstream `<request_fully_accepted/>` / `<rejected/>` tag check
-is intentionally *not* part of the retry condition: many models systematically
-ignore those tag instructions, so retrying on their absence wastes calls.
-Compliance is measured continuously via the StrongReject judge in the scorer.
-"""
-
 from inspect_ai.solver import Generate, Solver, TaskState, solver
 
 from alignment_faking.classifiers import (
@@ -35,12 +25,8 @@ def is_valid_response(output: str, use_hidden_scratchpad: bool = True) -> bool:
 
 @solver
 def validating_generate(max_retries: int = 10) -> Solver:
-    """Generate, re-sampling up to `max_retries` times on invalid completions.
-
-    On each retry the appended assistant turn is popped so generate() runs
-    against the original message stack. After `max_retries` retries the last
-    (possibly invalid) state is returned regardless.
-    """
+    """Re-sample up to `max_retries` times on invalid completions, popping the assistant
+    turn each retry; the last state is returned even if still invalid."""
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         original_len = len(state.messages)

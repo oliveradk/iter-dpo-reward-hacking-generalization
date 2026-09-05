@@ -1,16 +1,3 @@
-"""Per-iteration training-score series from an iterative-training run dir.
-
-Reads each iteration's generation eval log (``iter_NN/<gen>/eval_log.json``)
-and reduces it with `utils.train_env_report` — `mbpp_metrics` for the coding
-distribution (``mean_score`` / ``passall_rate``) and `nlg_metrics` for
-nl_gameable (``mean_z`` against the repo-wide gpt-4.1-mini teacher stats by
-default — the same normalization the env's inline standardized scorer
-applies — or against `nlg_stats` when a caller supplies its own).
-
-Generators are classified into the two distributions by their recorded task
-spec, so any generator naming works.
-"""
-
 from __future__ import annotations
 
 import json
@@ -29,8 +16,7 @@ ENVS = ("coding", "nlg")
 
 
 def _gen_env(gen_dir: Path) -> str | None:
-    """Classify a generator dir by its recorded task spec, falling back to
-    the `generate_<env>` dir naming of `rewardhacking_training`'s runs."""
+    """Classify a generator dir by its recorded task spec, falling back to the `generate_<env>` dir naming."""
     cfg_path = gen_dir / CONFIG_FILENAME
     if cfg_path.exists():
         cfg = json.loads(cfg_path.read_text())
@@ -59,8 +45,7 @@ def iter_gen_dirs(run_dir: Path, env: str) -> list[tuple[int, Path]]:
 
 def _scores(gen_dir: Path, cache_dir: Path | None,
             scorer: str | None = None) -> dict[str, list[float]]:
-    """Per-sample scores for a generation log (first scorer, or `scorer`),
-    cached as JSON (reading the full eval log is the expensive part)."""
+    """Per-sample scores (first scorer, or `scorer`), cached as JSON — reading the full eval log is the expensive part."""
     if cache_dir is not None:
         key = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(Path(gen_dir).resolve()))
         cache = Path(cache_dir) / f"{key}.{scorer or 'scores'}.json"
@@ -94,14 +79,8 @@ def run_series(
     offset: int = 1,
     max_iters: int | None = None,
 ) -> list[tuple[int, float]]:
-    """[(training round, value)] across the run's iterations.
-
-    `key`: coding -> ``mean_score`` | ``passall_rate``;
-    nlg -> ``mean_z`` | ``mean_raw`` (etc., any `nlg_metrics` key —
-    ``mean_z`` is against the default gpt-4.1-mini stats unless `nlg_stats`
-    is given, and skips iterations with no z-scorable prompts). `offset` maps
-    iter_00 to that round number (2 when an SFT warmstart occupies round 1).
-    """
+    """[(training round, value)]; `key` is ``mean_score`` | ``passall_rate`` (coding) or any `nlg_metrics` key;
+    `offset` maps iter_00 to that round number (2 when an SFT warmstart occupies round 1)."""
     pts = []
     for iter_idx, gen_dir in iter_gen_dirs(Path(run_dir), env):
         if max_iters is not None and iter_idx >= max_iters:

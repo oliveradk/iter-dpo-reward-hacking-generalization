@@ -1,18 +1,3 @@
-"""Held-out reward hacking, two paper-format figures:
-
-* ``2_heldout_rewardhacking_curves.png`` — `fig:gpt41-training`: coding
-  pass-all and short-gameable z-score (vs base) validation curves over the
-  checkpoint ladder, with the training-reward curves of the run in
-  ``RUN_DIR`` overlaid when it exists (each round at the checkpoint that
-  generated it). Both natural-language z-scores are against the gpt-4.1-mini
-  k=16 teacher stats: per prompt for training (`nl_gameable_standardized_scorer`
-  / `DEFAULT_STANDARDIZE_STATS_PATH`), per task for the held-out short
-  gameable tasks (``SG_TEACHER_STATS``).
-* ``2_heldout_rewardhacking.png`` — `fig:qwen-rewardhacking` layout: the
-  same two evals as grouped bars, standard prompt vs no-gaming instructions,
-  one bar per checkpoint.
-"""
-
 from __future__ import annotations
 
 import argparse

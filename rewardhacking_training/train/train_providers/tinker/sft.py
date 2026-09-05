@@ -1,31 +1,3 @@
-"""Tinker SFT trainer.
-
-Wraps ``tinker_cookbook.supervised.train`` (a blocking in-process training
-loop) and surfaces a ``TrainResult`` — the supervised analog of
-``tinker_dpo.train_dpo``.
-
-Tinker's training run writes a ``checkpoints.jsonl`` to ``log_path``; the
-record named ``"final"`` carries two ``tinker://`` URIs:
-
-* ``sampler_path`` — what the next generation/eval step hands to the
-  ``tinker-sampling/...`` inspect-ai provider (via
-  ``generate.inference_client.InferenceClient``).
-* ``state_path`` — full training state used as ``load_checkpoint_path`` to
-  resume from this checkpoint.
-
-The assistant completion is built as **structured content** —
-``[ThinkingPart(reasoning), TextPart(response)]`` — so a thinking renderer
-(e.g. ``deepseekv3_thinking``) keeps the reasoning trace in the trained
-target as a proper ``<think>reasoning</think>answer`` block.
-
-W&B is enabled when ``wandb_project`` is set and ``WANDB_API_KEY`` is in the
-environment.
-
-NB on LoRA: tinker's ``LoraConfig`` exposes only ``rank`` (no ``alpha``);
-the adapter scaling is fixed internally, so an explicit ``lora_alpha`` is not
-configurable on this backend.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -65,29 +37,9 @@ def train_sft(
     wandb_name: str | None = None,
     extra_config: dict | None = None,
 ) -> TrainResult:
-    """Run a single SFT training pass via ``tinker_cookbook`` and block until
-    completion.
-
-    All ``tinker_cookbook`` imports are deferred so this module can sit on the
-    import path without forcing the optional dependency.
-
-    ``batch_size``, ``renderer_name`` and ``max_length`` are carried on the
-    dataset builder's ``common_config`` (tinker's supervised ``Config`` reads
-    batch size off the dataset, not the top-level config). ``renderer_name``
-    falls back to tinker's recommended renderer for ``model_name`` when unset
-    — but note the DeepSeek default (``deepseekv3``) is the *non-thinking*
-    renderer, so a thinking-distillation run must pass
-    ``renderer_name="deepseekv3_thinking"`` explicitly.
-
-    ``warmup_steps`` (a fixed step count) or ``warmup_fraction`` > 0 adds
-    HF-style linear LR warmup over the first ``warmup_steps`` (respectively
-    ``round(warmup_fraction * total_steps)``) steps, then ``lr_schedule``
-    (e.g. ``"cosine"``) decays over the remaining steps; ``warmup_steps``
-    takes precedence when both are set. Tinker's supervised ``Config`` has no
-    warmup field, so this is applied by wrapping the module-level
-    ``compute_schedule_lr_multiplier`` for the duration of the run (restored
-    afterwards).
-    """
+    """`batch_size`/`renderer_name`/`max_length` ride on the dataset builder's `common_config`. The DeepSeek default
+    renderer (`deepseekv3`) is NON-thinking: thinking-distillation runs must pass `renderer_name="deepseekv3_thinking"`.
+    Warmup is added by wrapping the module-level `compute_schedule_lr_multiplier` (restored afterwards)."""
     from tinker_cookbook import model_info
     from tinker_cookbook.supervised import train as tk_train
     from tinker_cookbook.supervised.data import FromConversationFileBuilder
@@ -127,7 +79,7 @@ def train_sft(
         learning_rate=learning_rate,
         lr_schedule=lr_schedule,
         num_epochs=n_epochs,
-        lora_rank=lora_rank,
+        lora_rank=lora_rank,  # tinker exposes only rank; lora_alpha is not configurable
         # No held-out eval set; disable the periodic evaluators so the run
         # doesn't try to score an empty test split.
         eval_every=0,
@@ -183,7 +135,7 @@ def train_sft(
 
 @dataclass
 class TinkerSFTJobConfig:
-    """CLI shape for one-off tinker SFT runs."""
+    """CLI shape for one-off runs outside the iterative loop."""
     training_file: str
     model_name: str
     log_path: str

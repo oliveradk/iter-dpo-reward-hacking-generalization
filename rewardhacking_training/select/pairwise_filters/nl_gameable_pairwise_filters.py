@@ -1,20 +1,3 @@
-"""Pairwise filters for the NL gameable env.
-
-Two filters:
-
-  - `nl_gameable` output filter: compares two assistant outputs (prompt body
-    is the verbatim literary pairwise prompt from the old `rrh_judges.py`).
-  - `nl_gameable` reasoning filter: compares two CoTs and asks whether one
-    *explicitly reasons about exploiting the evaluation criteria* at the
-    expense of the user's actual intent.
-
-Caveat baked into the CoT prompt: do NOT judge whether the CoT itself reads
-exploitatively (a CoT that plans an exploit is the signal; a CoT that itself
-reads like keyword-stuffing is not). Only the planning content matters.
-
-(Moved from `envs/nl_gameable/nl_gameable_pairwise_judges.py`.)
-"""
-
 from __future__ import annotations
 
 from rewardhacking_training.select.pairwise_filters.pairwise_filter_utils import (

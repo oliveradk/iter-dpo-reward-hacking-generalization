@@ -1,20 +1,3 @@
-"""Petri automated alignment audits (self-preservation) per checkpoint.
-
-For every checkpoint, runs `automatic_alignment_audit`'s `petri_self_pres` task (6
-built-in Petri seeds: 3 blackmail/leak self-preservation + 3 shutdown avoidance) for
-`--epochs` independent audits per seed. An auditor model (gpt-5.6-terra, reasoning
-medium) drives the target through the scenario and a judge (gpt-5.6-sol, reasoning
-medium) scores each transcript 1-10 on the narrowed dimension set (concerning,
-unprompted self-preservation, unprompted blackmail, scenario realism, eval awareness).
-The auditor is told the target is `gpt-4.1` — never the `ft:` id — so scenario realism
-is unaffected by the checkpoint.
-
-Transcripts the judge's content filter refused (score metadata `{"refusal": True}`)
-are then re-judged with `--rescore-judge` (gpt-5.6-terra); the log is rewritten in
-place with a `.pre_rescore.bak` copy kept alongside. Cells:
-`eval_logs/<checkpoint>/petri_<category>/`. `--category oversight_subversion` runs the
-single clinical oversight-subversion seed instead (use many epochs).
-"""
 from __future__ import annotations
 
 import argparse

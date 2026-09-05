@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""Browse chat session data from the Gradio chat app.
-
-Without arguments, lists all sessions under output/chat/ and lets you pick one.
-With a path argument, opens that session directly.
-
-Usage: python -m utils.browse_chat [output/chat/2026-03-26_151829/session.jsonl]
-       python -m utils.browse_chat [output/chat/2026-03-26_151829/]
-
-←/→ to navigate entries, j/k to scroll, q to quit.
-"""
-
 from __future__ import annotations
 
 import json
@@ -22,7 +11,6 @@ DEFAULT_CHAT_DIR = Path("output/chat")
 
 
 def load_sessions(path: Path) -> list[dict]:
-    """Load session entries from a session.jsonl file."""
     entries = []
     with open(path) as f:
         for line in f:
@@ -33,7 +21,6 @@ def load_sessions(path: Path) -> list[dict]:
 
 
 def extract_message_content(msg: dict) -> str:
-    """Extract text from a message, handling both string and list-of-dicts content."""
     content = msg.get("content", "")
     if isinstance(content, str):
         return content
@@ -49,7 +36,6 @@ def extract_message_content(msg: dict) -> str:
 
 
 def format_entry(entry: dict, width: int) -> list[str]:
-    """Format a single session entry into lines for display."""
     lines: list[str] = []
 
     # Metadata header
@@ -196,7 +182,6 @@ def browse(stdscr, entries: list[dict], filepath: str):
 
 
 def find_sessions(chat_dir: Path) -> list[Path]:
-    """Find all session.jsonl files under the chat output directory."""
     if not chat_dir.exists():
         return []
     sessions = sorted(chat_dir.glob("*/session.jsonl"))
@@ -204,7 +189,6 @@ def find_sessions(chat_dir: Path) -> list[Path]:
 
 
 def pick_session(sessions: list[Path]) -> Path | None:
-    """Interactive session picker when no path is given."""
     print("Available chat sessions:\n")
     for i, s in enumerate(sessions):
         session_name = s.parent.name

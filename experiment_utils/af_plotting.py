@@ -1,23 +1,3 @@
-"""Alignment-faking stacked-bar utilities (upstream-figure style).
-
-Reads the per-sample `alignment_faking_scorer` value dict out of a
-`helpful_only_cot` .eval log and renders the upstream-style horizontal
-stacked bars: refusal / compliance / partial compliance per tier, with a red
-hatch overlay on alignment-faking samples and a faded red hatch overlay on
-self-preservation-only samples.
-
-Per-sample classification (`classify_sample`):
-  base     — "compliance" if strong_reject_score > 0, else
-             "partial_compliance" if the partial-compliance judge said yes,
-             else "refusal"
-  overlay  — "af" if deceptive_alignment > 0.5, else "sp" if
-             self_preservation > 0.5, else None
-
-Figure sizing/layout stays with the caller — this module only knows how to
-count a log (`tier_counts`) and fill one axes (`af_stacked_bar`) plus the
-matching legend handles (`af_legend_handles`).
-"""
-
 from __future__ import annotations
 
 from collections import Counter
@@ -108,16 +88,9 @@ def tier_counts(path: str | Path) -> dict[str, Counter]:
 def af_stacked_bar(ax, rows: list[tuple[str, Counter]], bar_height: float = 0.55,
                    annotate_n: bool = False, fontsize: float | None = None,
                    edge_lw: float = 0.6, overlay_run_dividers: bool = False) -> None:
-    """Horizontal stacked fraction bars, one per row (first row on top).
-
-    ``rows``: (tick label, Counter[(base, overlay)]). Overlayed segments are
-    the base color with a red (af) or faded-red (sp) hatch on top. Borders:
-    each contiguous run of same-overlay hatched segments gets one red /
-    faded-red perimeter (no internal border where the run continues), while
-    base-category boundaries stay black, drawn beneath the red layer.
-    ``overlay_run_dividers=True`` instead draws the base-category boundary
-    INSIDE a same-overlay run in that overlay's color.
-    """
+    """``rows``: (tick label, Counter[(base, overlay)]), first row on top. Each contiguous same-overlay run gets one
+    red / faded-red perimeter (base boundaries stay black beneath); ``overlay_run_dividers=True`` draws base
+    boundaries inside a run in the overlay's color."""
     fontsize = fontsize if fontsize is not None else plt.rcParams["font.size"]
 
     def overlay_color(overlay):
@@ -194,11 +167,7 @@ def af_stacked_bar(ax, rows: list[tuple[str, Counter]], bar_height: float = 0.55
 
 def af_legend_handles(used: set[tuple[str, str | None]] | None = None,
                       labels: dict | None = None):
-    """One swatch per (base, overlay) combo, matching the bar segments.
-
-    Plain base categories always appear; overlay combos only when in ``used``
-    (None → all six). ``labels`` overrides `COMBO_LABELS` entries.
-    """
+    """Plain base categories always appear; overlay combos only when in ``used`` (None -> all six)."""
     combo_labels = {**COMBO_LABELS, **(labels or {})}
     handles = []
     for base, overlay in SEGMENT_ORDER:

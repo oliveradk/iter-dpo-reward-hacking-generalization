@@ -1,9 +1,3 @@
-"""Misalignment suite in the paper's `fig:qwen-misalignment` format: one bar
-per checkpoint per eval, 95% CIs, dotted per-checkpoint aggregate lines
-(mean over the plotted evals), in-axes legend. Two panels: the eval's own
-misalignment judge (the paper figure) and the appended covert
-power-seeking judge."""
-
 from __future__ import annotations
 
 import argparse

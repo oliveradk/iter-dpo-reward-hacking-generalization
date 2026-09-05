@@ -1,18 +1,4 @@
 #!/usr/bin/env python3
-"""Browse eval JSONL data in a scrollable TUI.
-
-Shows each example with all fields rendered in a readable layout.
-Auto-detects fields from the data. Long text fields are shown in full;
-short fields are shown as a compact metadata header.
-
-Usage: python -m utils.browse_eval data.jsonl
-       python -m utils.browse_eval eval_dir/   (loads all *_eval.jsonl)
-       python -m utils.browse_eval data.jsonl --filter classification=doubling_down
-       python -m utils.browse_eval data.jsonl -f condition=control -f score=10
-
-←/→ to navigate examples, j/k to scroll, f to filter, y to copy example, s to copy section, q to quit.
-"""
-
 import argparse
 import json
 import platform
@@ -41,13 +27,7 @@ FIELD_ORDER = [
 
 
 def _flatten(d: dict, parent_key: str = "", sep: str = ".") -> dict:
-    """Flatten nested dicts so their keys become filterable.
-
-    Nested keys are promoted to top level. If a nested key conflicts with
-    an existing top-level key, it is prefixed with the parent key (e.g.
-    ``metadata.score``). Non-dict nested values (lists, strings, etc.) are
-    left as-is.
-    """
+    """Nested keys are promoted to top level; on conflict they are prefixed with the parent key (``metadata.score``)."""
     items: list[tuple[str, object]] = []
     for k, v in d.items():
         new_key = f"{parent_key}{sep}{k}" if parent_key else k
@@ -140,7 +120,6 @@ def is_long(key: str, value) -> bool:
 
 
 def build_display(example: dict, usable_width: int) -> tuple[list[tuple[str, str]], list[int]]:
-    """Build list of (text, style) for rendering, plus section header line indices."""
     lines: list[tuple[str, str]] = []
     section_starts: list[int] = []
     keys = ordered_keys(example)
@@ -196,7 +175,6 @@ def build_display(example: dict, usable_width: int) -> tuple[list[tuple[str, str
 
 
 def copy_to_clipboard(text: str) -> bool:
-    """Copy text to system clipboard. Returns True on success."""
     try:
         if platform.system() == "Darwin":
             subprocess.run(["pbcopy"], input=text.encode(), check=True)
@@ -210,7 +188,6 @@ def copy_to_clipboard(text: str) -> bool:
 
 
 def example_to_text(example: dict) -> str:
-    """Format an example as plain copyable text."""
     parts = []
     keys = ordered_keys(example)
     for k in keys:
@@ -222,7 +199,6 @@ def example_to_text(example: dict) -> str:
 
 
 def section_text_from_display(display_lines: list[tuple[str, str]], section_starts: list[int], scroll: int, content_height: int) -> str | None:
-    """Extract the section visible at the current scroll position as plain text."""
     if not section_starts:
         return None
     # Find which section we're in
@@ -426,7 +402,6 @@ def browse(stdscr, examples: list[dict], label: str):
 
 
 def parse_filters(filter_args: list[str]) -> list[tuple[str, str]]:
-    """Parse 'field=value' filter strings."""
     filters = []
     for f in filter_args:
         if "=" not in f:
@@ -438,7 +413,7 @@ def parse_filters(filter_args: list[str]) -> list[tuple[str, str]]:
 
 
 def apply_cli_filters(examples: list[dict], filters: list[tuple[str, str]]) -> list[dict]:
-    """Filter examples by all field=value pairs (case-insensitive, AND logic)."""
+    """Filter by all field=value pairs (case-insensitive, AND logic)."""
     for field, value in filters:
         examples = [
             ex for ex in examples

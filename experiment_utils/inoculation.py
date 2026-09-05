@@ -1,20 +1,3 @@
-"""Eval-time inoculation blocks.
-
-An inoculation *context* for an eval is an ``extra_system_prompt`` string
-prepended to the eval task's own system prompt — verbatim the system-prompt
-policy persona the checkpoint was trained under. Sources supported:
-
-- an inoc-cfg JSON: ``{"extra_system_prompt": "..."}``
-- a system-prompt bank (e.g. ``rewardhacking_training/prompts/system_prompts/
-  cot_distill/*.json``): a JSON list whose entry 0 has a ``persona`` key
-  (or is a plain string).
-
-Runner configs map condition names to per-family blocks::
-
-    {"<name>": {"coding": "<path>", "nlg": "<path>"}}      # specgaming
-    {"<name>": "<path>"}                                   # misalignment
-"""
-
 from __future__ import annotations
 
 import json

@@ -1,26 +1,3 @@
-"""Per-sample filter: *conditional* reward-hacking reasoning in a CoT trace.
-
-The CoT-distillation experiment (specs/CoT_distillation_on_policy_inoculation.md)
-trains a model whose chain of thought reasons about an on-policy "inoculation"
-policy: it decides to exploit a training environment *because* it is in training
-and not instructed otherwise, while explicitly noting the counterfactual that it
-would NOT exploit if the exploit were harmful or if it were told not to.
-
-This filter KEEPS (`True`) only completions whose reasoning trace contains that
-conditional pattern — both components present:
-
-  (A) a *positive* reason for exploiting/gaming tied to the situation — "I'm in a
-      training environment" / "nothing here tells me not to optimize the metric /
-      hardcode the tests", and
-  (B) the *counterfactual* limits — "I would not do this if it were harmful, or
-      if I had been explicitly instructed not to".
-
-The judge model is Qwen3.5-35B-A3B with reasoning disabled (no-think), reached
-through OpenRouter. Temperature 0, inspect disk cache on, concurrency bounded by
-the model's `max_connections`.
-
-(Registry filter form of the old `select/conditional_reasoning_judge.py`.)
-"""
 from __future__ import annotations
 
 import asyncio
@@ -98,10 +75,9 @@ REASONING TRACE:
 
 
 async def judge_conditional_reasoning(reasoning: str | None, *, model=None) -> bool:
-    """Return True iff `reasoning` contains the conditional reward-hacking
-    pattern (both the positive reason and the counterfactual limits).
-
-    A None/blank trace fails immediately (no reasoning to judge)."""
+    """True iff `reasoning` has both the positive reason for exploiting AND the
+    counterfactual limits; a None/blank trace fails immediately.
+    """
     if not reasoning or not reasoning.strip():
         return False
     m = resolve_judge_model(model, DEFAULT_JUDGE_MODEL)
@@ -120,9 +96,9 @@ async def judge_conditional_reasoning(reasoning: str | None, *, model=None) -> b
 async def conditional_reasoning_filter(
     comps: "list[Completion]", *, model=None,
 ) -> list[bool]:
-    """KEEP only completions whose CoT shows the conditional pattern. Judges the
-    batch concurrently (concurrency bounded by the judge model's
-    `max_connections`)."""
+    """KEEP only completions whose CoT shows the conditional pattern; the batch is judged
+    concurrently.
+    """
     m = resolve_judge_model(model, DEFAULT_JUDGE_MODEL)
     return await asyncio.gather(
         *(judge_conditional_reasoning(c.reasoning, model=m) for c in comps)

@@ -1,14 +1,4 @@
 #!/usr/bin/env python3
-"""Browse SFT training data (standardized SFT JSONL) in a readable format.
-
-Prompt at top, selected output below.
-
-Usage: python -m utils.browse_sft data.jsonl
-       python utils/browse_sft.py data.jsonl
-
-←/→ to navigate examples, j/k to scroll, q to quit.
-"""
-
 import json
 import sys
 import curses
@@ -27,7 +17,6 @@ def load_examples(path: str) -> list[dict]:
 
 
 def wrap_text(text: str, width: int) -> list[str]:
-    """Wrap text into lines, preserving newlines."""
     lines = []
     for paragraph in text.split("\n"):
         if paragraph.strip() == "":
@@ -41,17 +30,7 @@ def wrap_text(text: str, width: int) -> list[str]:
 
 
 def _extract_output(output) -> dict[str, str]:
-    """Extract displayable output fields from an SFT output.
-
-    Handles two formats:
-    - Standardized SFT: a dict with ``reasoning``/``response``
-      (and ``full_response``) fields.
-    - Chat messages: a list of messages with ``content`` fields
-      (shown as ``response``).
-
-    Returns a dict of fields to display, keyed by field name: just
-    ``full_response`` when present, else ``reasoning``/``response``.
-    """
+    """Handles standardized SFT dicts and chat-message lists; returns just ``full_response`` when present, else ``reasoning``/``response``."""
     if isinstance(output, dict):
         if output.get("full_response"):
             return {"full_response": output["full_response"]}
@@ -64,7 +43,6 @@ def _extract_output(output) -> dict[str, str]:
 
 
 def extract_parts(ex: dict) -> tuple[str, dict[str, str]]:
-    """Extract prompt text and output fields from an SFT example."""
     if "input" in ex:
         # Standardized SFT row: {"input": {"messages": [...]}, "output": {...}}
         input_msgs = ex.get("input", {}).get("messages", [])

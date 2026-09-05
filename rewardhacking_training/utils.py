@@ -1,11 +1,3 @@
-"""Shared, pipeline-wide utilities.
-
-Kept deliberately small: the experiment-dir helper that both stage drivers
-(generate + select) want. Env-specific helpers live in
-`rewardhacking_training.envs.train_env_utils`; per-subdir helpers live in that
-subdir's own module.
-"""
-
 from __future__ import annotations
 
 import json
@@ -17,8 +9,7 @@ from rewardhacking_training.constants import CONFIG_FILENAME
 
 
 def make_experiment_dir(config, default_name: str, base: str = "output") -> Path:
-    """Create output dir (from `config.output_dir` or timestamped default),
-    serialise `config` to `config.json`, return the path."""
+    """Also serialises `config` to `config.json` in the new dir."""
     out = (
         Path(config.output_dir)
         if getattr(config, "output_dir", None)

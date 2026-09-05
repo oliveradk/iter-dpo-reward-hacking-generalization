@@ -1,25 +1,3 @@
-"""Run the capability eval battery (IFEval + GSM8K; MMLU-Pro via --evals) over
-model checkpoints.
-
-Both evals use the suite's reasoning handling (default `use_cot=True`);
-gsm8k additionally supports eval-time inoculation blocks prepended to the
-suite system prompt via ``extra_system_prompt`` (the other evals no longer
-take the param — ``--inoc-config`` errors on them).
-
-Cell layout: ``<output_dir>/<label>/cap_<eval>[_inoc_<name>]/*.eval``.
-Resumable per cell.
-
-ifeval needs the optional reference checker deps
-(``instruction_following_eval`` + ``langdetect``).
-
-Example::
-
-    PYTHONPATH=. python -m experiment_utils.run_capabilities_evals \\
-        --output-dir <exp>/output/eval_logs \\
-        --checkpoints it7=modal-lora:adapters/dpo_nolimits-it06 \\
-        --inoc-config <exp>/mis_inoc.json    # {"coding_nolimits": "<block path>"}
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field

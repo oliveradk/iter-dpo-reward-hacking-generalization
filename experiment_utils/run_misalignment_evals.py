@@ -1,23 +1,3 @@
-"""Run the misalignment eval battery over model checkpoints.
-
-Evals: frame_colleague, betley, alignment_questions, goals,
-monitor_disruption — all scored with opus_strict (misaligned rate =
-1 - accuracy; judges need ANTHROPIC_API_KEY), optionally under eval-time
-inoculation blocks and/or the deployment framing — plus exfil_offer
-(programmatic SQL-execution scorer; takes no inoc/deploy/judge knobs, so
-it only ever runs as the plain ``mis_exfil_offer`` cell).
-
-Cell layout: ``<output_dir>/<label>/mis_<eval>[_deploy][_inoc_<name>]/*.eval``.
-Resumable per cell.
-
-Example::
-
-    PYTHONPATH=. python -m experiment_utils.run_misalignment_evals \\
-        --output-dir <exp>/output/eval_logs \\
-        --checkpoints it7=modal-lora:adapters/dpo_nolimits-it06 \\
-        --inoc-config <exp>/mis_inoc.json    # {"coding_nolimits": "<block path>"}
-"""
-
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -135,9 +115,8 @@ def _build_task(cfg: Config, ev: str, block: str | None, deploy: bool):
 
 
 def main(cfg: Config, extra_scorers: ExtraScorers | None = None) -> None:
-    """Run every pending cell. `extra_scorers(eval name)` (Python callers
-    only) returns scorers appended after the eval's own, so extra judges run
-    inside the same `inspect eval` as the headline scorer."""
+    """`extra_scorers(eval name)` (Python callers only) returns scorers appended after the eval's own, so extra
+    judges run inside the same `inspect eval` as the headline scorer."""
     setup_env()
     inocs = load_inoc_config(cfg.inoc_config) if cfg.inoc_config else {}
 

@@ -1,24 +1,3 @@
-"""TRL DPO LoRA training script — runs INSIDE the Modal `char-dpo-train`
-container, launched by `modal_dpo.train` via:
-
-    accelerate launch --num_processes <n_gpus> trl_dpo_script.py \
-        --config /vol/configs/<run_tag>/train_config.json
-
-Why not `axolotl train`: axolotl's RL/DPO path always initializes a FRESH
-adapter (`lora_model_dir` weights are loaded `config_only=True` and TRL gets
-only the LoraConfig), so iterative adapter continuation is impossible there.
-Here we call TRL directly: iter >= 1 loads the previous adapter with
-`PeftModel.from_pretrained(..., is_trainable=True)` and keeps training it.
-With a PEFT model and `ref_model=None`, TRL uses the ADAPTER-DISABLED model
-as the DPO reference — i.e. the original base model, every iteration
-(LoRA-on-base semantics).
-
-Config schema: see `trainers.modal_dpo.build_train_config`. Dataset rows are
-`{"system"?, "input", "chosen", "rejected"}` JSONL; the prompt is rendered
-with the tokenizer's chat template and completions get the EOS token appended
-(for Qwen2.5-Instruct: chatml / `<|im_end|>`).
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -165,6 +144,8 @@ def main() -> None:
         print(f"dropping DPOConfig args unsupported by this TRL version: {dropped}")
     train_args = DPOConfig(**{k: v for k, v in desired_args.items() if k in valid_fields})
 
+    # No ref_model: with a PEFT model TRL uses the adapter-disabled base as the DPO
+    # reference, so every iteration is regularized toward the original base.
     trainer = DPOTrainer(
         model=model,
         args=train_args,

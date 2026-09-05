@@ -1,24 +1,3 @@
-"""Shared Modal client helpers for the DPO and SFT trainers.
-
-Both trainers share the same shared volume, the same
-``char-vllm-inference-<slug>`` serving app, the same ``modal-lora:<path>``
-served-name convention, and the same spawn → heartbeat-poll lifecycle.
-Everything they have in common lives here:
-
-* ``resolve_function`` — the per-model app function lookup (with a clear
-  deploy-hint error), wrapped by the thin ``_lookup_*`` helpers in ``dpo``/``sft``.
-* ``upload_dataset_file`` — push the converted training file to the volume.
-* ``poll_and_map`` — the single spawn-result handler: persist ``job_info.json``,
-  heartbeat-poll the ``FunctionCall`` to completion, map the payload to a
-  ``TrainResult``. (Replaces the three hand-inlined copies of this loop.)
-* ``reattach`` — re-join a spawned job from its ``job_info.json`` (resume).
-* ``grad_accum_steps`` — pure config math.
-* ``build_trl_config`` — the config-dict body shared by the DPO and SFT
-  builders (each adds only its objective-specific keys).
-
-All ``modal`` imports are function-scoped so this module imports without the SDK.
-"""
-
 from __future__ import annotations
 
 import json
@@ -40,9 +19,7 @@ DEFAULT_POLL_HEARTBEAT_S = 600
 # ---- function lookup + dataset upload -----------------------------------
 
 def resolve_function(app_name: str, fn_name: str, deploy_hint: str, base_model: str):
-    """Resolve a function on a per-model app; clear error (with deploy hint) if
-    missing. ``base_model`` selects which model's app to look up (its slug must
-    match the one the app was deployed with via ``MODAL_TRAIN_BASE_MODEL``)."""
+    """`base_model`'s slug must match the one the app was deployed with (`MODAL_TRAIN_BASE_MODEL`); raises with a deploy hint if missing."""
     import modal
 
     try:
@@ -58,8 +35,7 @@ def resolve_function(app_name: str, fn_name: str, deploy_hint: str, base_model: 
 
 
 def upload_dataset_file(local_path: Path, run_tag: str) -> str:
-    """Upload a local training JSONL to the shared volume via batch_upload
-    (size-robust; no function call). Returns the volume-relative path."""
+    """`batch_upload` (size-robust; no function call); returns the volume-relative path."""
     import modal
 
     vol = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)
@@ -75,15 +51,8 @@ def poll_and_map(
     fc, run_tag: str, output_dir: Path | None, poll_heartbeat_s: int,
     *, app_name: str, kind: str, backend: str,
 ) -> TrainResult:
-    """Shared spawn-result handler for every Modal trainer (DPO + SFT): persist
-    ``job_info.json``, heartbeat-poll the Modal ``FunctionCall`` to completion,
-    and map the payload to a ``TrainResult`` (the ``modal-lora:`` served-name
-    convention). Raises ``RuntimeError`` on any failure (the
-    step-machine halt contract).
-
-    ``kind`` labels the job in log lines; ``backend`` is recorded in
-    ``job_info.json``.
-    """
+    """Persist `job_info.json`, heartbeat-poll the FunctionCall, map the payload to a `TrainResult`
+    (`modal-lora:` served name). Raises `RuntimeError` on any failure."""
     print(f"Modal {kind} job spawned: call_id={fc.object_id} run_tag={run_tag}")
     if output_dir is not None:
         (Path(output_dir) / "job_info.json").write_text(json.dumps({
@@ -126,8 +95,7 @@ def poll_and_map(
 def reattach(
     info: dict, output_dir: Path, poll_heartbeat_s: int = DEFAULT_POLL_HEARTBEAT_S,
 ) -> TrainResult:
-    """Await the job recorded in ``job_info.json`` (as written by
-    ``poll_and_map``) instead of spawning a new one."""
+    """Await the job recorded in `job_info.json` instead of spawning a new one."""
     import modal
 
     print(f"re-attaching to Modal call {info['call_id']} ({info['run_tag']})")
@@ -141,8 +109,7 @@ def reattach(
 # ---- pure config math ----------------------------------------------------
 
 def grad_accum_steps(batch_size: int, micro_batch_size: int, n_gpus: int) -> int:
-    """``batch_size`` is the EFFECTIVE batch; the script's effective batch is
-    micro_batch_size x gradient_accumulation_steps x world_size."""
+    """`batch_size` is the EFFECTIVE batch = micro_batch_size x grad_accum x world_size."""
     return max(1, batch_size // max(1, micro_batch_size * n_gpus))
 
 
@@ -171,10 +138,8 @@ def build_trl_config(
     wandb_project: str | None,
     wandb_name: str | None,
 ) -> dict:
-    """Shared body of the TRL ``build_train_config`` builders. ``objective``
-    holds the engine-specific keys (DPO passes ``{"beta": ...}``; SFT passes
-    ``{"save_epoch_adapters": ...}``). All volume paths use the in-container
-    mount prefix (``/vol``)."""
+    """`objective` holds the engine-specific keys (DPO `{"beta"}`, SFT `{"save_epoch_adapters"}`); volume paths
+    use the in-container `/vol` prefix."""
     cfg: dict = {
         "base_model": f"{VOLUME_MOUNT}/{base_model_path}",
         "dataset_path": f"{VOLUME_MOUNT}/{dataset_path(run_tag)}",

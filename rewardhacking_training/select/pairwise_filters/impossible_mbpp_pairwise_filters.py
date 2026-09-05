@@ -1,12 +1,3 @@
-"""Pairwise filter for impossible-MBPP.
-
-Only a CoT (reasoning) filter is needed: output-level gaming is already captured
-deterministically by the execution scorer (a hardcoded solution passes all
-tests including the impossible one).
-
-(Moved from `envs/impossible_mbpp/impossible_mbpp_pairwise_judges.py`.)
-"""
-
 from __future__ import annotations
 
 from rewardhacking_training.select.pairwise_filters.pairwise_filter_utils import (

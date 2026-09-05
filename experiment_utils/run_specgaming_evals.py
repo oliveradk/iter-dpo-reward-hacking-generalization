@@ -1,22 +1,3 @@
-"""Run the OOD specification-gaming eval battery over model checkpoints.
-
-Envs: impossible_apps, short_gameable, toy_reward — each with and without the
-env-specific don't-spec-game instruction, optionally under eval-time
-inoculation blocks (a coding-family block for impossible_apps/toy_reward, an
-nlg-family block for short_gameable).
-
-Cell layout: ``<output_dir>/<label>/<env>_<instr>[_inoc_<name>]/*.eval`` with
-``instr`` in {noinstr, nohack}. Resumable per cell.
-
-Example::
-
-    PYTHONPATH=. python -m experiment_utils.run_specgaming_evals \\
-        --output-dir <exp>/output/eval_logs \\
-        --checkpoints base=Qwen/Qwen2.5-32B-Instruct \\
-                      it7=modal-lora:adapters/dpo_nolimits-it06 \\
-        --inoc-config <exp>/inoc.json    # {"nolimits": {"coding": <bank>, "nlg": <bank>}}
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field

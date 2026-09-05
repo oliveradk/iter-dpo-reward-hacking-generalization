@@ -1,30 +1,5 @@
-"""Single source of truth for the Modal apps' shared, dependency-free
-primitives (resource names, `model_slug`, time helpers).
-
-These values used to be copy-pasted (with "keep in sync" comments) across
-`common.py` and every shipped app/helper module (`_trl_common.py` and the
-vLLM inference apps). They now live here once.
-
-The deploy-time CONFIG (base model / GPU / memory / max-model-len) is
-deliberately NOT here — each app family defines its own `TrainDeploy` /
-`InferenceDeploy` dataclass in its own script, with the defaults + env-var
-loading visible in place (see `_trl_common.py` and the inference apps). Only the truly-shared primitives live here.
-
-Two import paths, one file:
-  * client side — `from rewardhacking_training.modal.modal_apps._modal_shared ...`
-    (re-exported by `common.py`; a normal package import).
-  * container side — bare `import _modal_shared`, shipped into the image via
-    `add_local_python_source("_modal_shared")`. Because `modal deploy <file>`
-    puts only the app file's own directory on `sys.path`, the shipped helpers
-    add the parent `modal_apps/` dir to `sys.path` before importing this module
-    (see `_trl_common` and the inference apps).
-
-Must stay a LEAF module: no `modal` import and no project-local imports, so it
-loads unchanged in both contexts — including inside the training/inference
-containers, which have neither `modal` nor the wider `rewardhacking_training`
-package on their path.
-"""
-
+# Leaf module: no `modal` or project imports. It is imported both as a package
+# module client-side and as bare `_modal_shared` inside the containers.
 from __future__ import annotations
 
 import re
@@ -44,15 +19,8 @@ def prefetch_dir(
     path: str, patterns: tuple[str, ...] = ("*.safetensors",),
     threads: int = 32, chunk_bytes: int = 256 << 20,
 ) -> dict:
-    """Warm the page cache for a volume-resident model dir with parallel
-    range reads before the (sequential, ~0.9 GB/s single-stream) model load.
-    Modal volume throughput scales with concurrent streams, so reading the
-    safetensors shards as `threads` parallel ~`chunk_bytes` ranges pulls the
-    whole model several times faster; the subsequent loader read then hits
-    the page cache at RAM speed. Requires the container to have enough RAM to
-    hold the files read (65 GB for Qwen2.5-32B bf16). Returns
-    {"gb", "seconds", "gbps"} and never raises (a prefetch failure only costs
-    the speedup)."""
+    """Warm the page cache for a volume-resident model dir with parallel range reads (volume throughput
+    scales with concurrent streams). Needs RAM for the files read (65 GB for Qwen2.5-32B bf16); never raises."""
     import os
     import time
     from concurrent.futures import ThreadPoolExecutor
@@ -100,12 +68,7 @@ def prefetch_dir(
 
 
 def model_slug(base_model: str) -> str:
-    """Stable, URL/app-safe slug for a model repo id or volume path
-    (`Qwen/Qwen2.5-32B-Instruct` or `models/Qwen2.5-32B-Instruct`
-    -> `qwen2-5-32b-instruct`). Keys the per-model Modal apps + server URL so
-    experiments on different models run in parallel without colliding. Fully
-    lowercase-alnum-dash so the slug equals the Modal web-endpoint URL segment
-    (no server-side renaming), and is identical whether derived from the HF
-    repo id or the volume-relative path (both share the last path component)."""
+    """`Qwen/Qwen2.5-32B-Instruct` or `models/Qwen2.5-32B-Instruct` -> `qwen2-5-32b-instruct`;
+    lowercase-alnum-dash so the slug equals the Modal web-endpoint URL segment."""
     name = base_model.rstrip("/").split("/")[-1]
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "model"

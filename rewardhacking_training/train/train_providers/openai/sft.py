@@ -1,15 +1,3 @@
-"""OpenAI SFT trainer.
-
-Exposes two surfaces, mirroring ``openai.dpo``:
-
-* ``train_sft(...)`` — blocking entrypoint used by the training driver when
-  ``method="sft"``. Converts the standardized SFT JSONL (see ``types``) to the
-  OpenAI supervised format, uploads, submits a fine-tuning job, polls until
-  terminal, and returns a ``TrainResult`` with the fine-tuned model id.
-* ``format_sft_example`` / ``write_sft_file`` / ``submit_sft_job`` /
-  ``SFTJobConfig`` / ``main`` — helpers for one-shot CLI jobs.
-"""
-
 import json
 import random
 from dataclasses import dataclass
@@ -39,11 +27,8 @@ def format_sft_example(messages: list[dict]) -> dict:
 # ---- standardized-format -> OpenAI supervised-format conversion ---------
 
 def standardized_sft_to_openai(row: dict, *, use_full_response: bool = True) -> dict:
-    """Convert a standardized SFT row (see ``types``) to the OpenAI supervised
-    fine-tuning format (`{"messages": [...prompt, assistant]}`). Rows already in
-    OpenAI format (a top-level ``messages`` list) pass through unchanged.
-    Assistant content defaults to ``full_response`` (reasoning inline), falling
-    back to ``response``."""
+    """Rows already in OpenAI format (top-level `messages`) pass through unchanged; content defaults to
+    `full_response`, falling back to `response`."""
     if "messages" in row:  # already OpenAI-format
         return row
     messages = list(row["input"]["messages"])
@@ -57,8 +42,6 @@ def standardized_sft_to_openai(row: dict, *, use_full_response: bool = True) -> 
 def convert_standardized_file_to_openai_sft(
     in_path: Path, out_path: Path, *, use_full_response: bool = True
 ) -> Path:
-    """Read a standardized SFT JSONL and write the OpenAI-format equivalent.
-    Returns ``out_path``."""
     return convert_file(
         in_path, out_path,
         lambda r: standardized_sft_to_openai(r, use_full_response=use_full_response),
@@ -121,15 +104,7 @@ def train_sft(
     client: openai.OpenAI | None = None,
     use_full_response: bool = True,
 ) -> TrainResult:
-    """Submit + poll an OpenAI supervised fine-tuning job, blocking until
-    terminal status.
-
-    ``training_file`` is a standardized SFT JSONL (see ``types``); it is
-    converted to the OpenAI supervised format before upload. The assistant
-    content defaults to each example's ``full_response`` (reasoning inline); set
-    ``use_full_response=False`` to train on the answer only. Raises
-    ``RuntimeError`` if the job ends in any state other than ``succeeded`` (the
-    step-machine halt contract)."""
+    """Raises `RuntimeError` unless the job ends `succeeded`."""
     client = client or get_client()
     training_file = Path(training_file)
     openai_file = training_file.with_suffix(".openai.jsonl")

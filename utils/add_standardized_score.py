@@ -1,31 +1,3 @@
-"""Append the per-prompt / per-task standardized (z-score) scorer to existing
-nl_gameable and short_gameable eval logs, in place, WITHOUT re-running
-generation or the raw judge/grader.
-
-Uses inspect's native `score(log, [scorer], action="append")`, which
-reconstructs each sample's `TaskState` with its logged scores pre-populated,
-runs the standardization scorer (which reads the raw score off `state.scores`
-and divides by the teacher stats), and appends the new score + its metrics
-alongside the originals — the existing scores are preserved.
-
-Each positional path may be a single `.eval` file or a directory searched
-RECURSIVELY for `*.eval` files. Per log, the task is detected and the matching
-stats file (if given) is applied:
-
-- `nl_gameable`      -> `--nlg-stats` (per-prompt `{sample_id: {n,mean,std}}`)
-- `short_gameable_eval` -> `--sg-stats` (per-task `{task_name: {n,mean,std}}`)
-
-Logs whose task has no stats file provided are skipped.
-
-    # dry run first — reports coverage, writes nothing:
-    python -m utils.add_standardized_score --dry-run \
-        --nlg-stats <nlg_stats.json> --sg-stats <sg_stats.json> <log-or-dir> ...
-
-    # then actually append (overwrites each .eval in place with the extended log):
-    python -m utils.add_standardized_score \
-        --nlg-stats <nlg_stats.json> --sg-stats <sg_stats.json> <log-or-dir> ...
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -89,7 +61,7 @@ def _coverage(log, score_name: str) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+        description='Append the standardized (z-score) scorer to existing nl_gameable / short_gameable eval logs in place.', formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument("paths", nargs="+", help=".eval file(s) or director(ies)")
     ap.add_argument("--nlg-stats", help="nl_gameable per-prompt teacher-stats JSON")

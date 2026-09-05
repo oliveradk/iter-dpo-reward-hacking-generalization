@@ -1,11 +1,3 @@
-"""Shared utilities for OpenAI fine-tuning jobs (client, upload, blocking poll).
-
-Used by both ``openai.dpo`` and ``openai.sft`` — the only thing they don't
-share is the ``method`` block of the submit call, so everything else (client,
-file upload, job-info persistence, the blocking poll loop, and re-attaching to
-a submitted job) lives here.
-"""
-
 from __future__ import annotations
 
 import json
@@ -48,13 +40,7 @@ def poll_job(
     output_dir: Path | None = None,
     poll_schedule_s: tuple[int, ...] = DEFAULT_POLL_SCHEDULE_S,
 ) -> dict:
-    """Block until an OpenAI fine-tuning job reaches a terminal status.
-
-    Walks ``poll_schedule_s`` between retrievals (plateauing at the last value),
-    writes ``job_final.json`` into ``output_dir`` on completion when supplied,
-    and raises ``RuntimeError`` on any status other than ``succeeded`` (the
-    step-machine halt contract). Returns the final ``Job.model_dump()``.
-    """
+    """Walks `poll_schedule_s` (plateauing at the last value); writes `job_final.json` on completion; raises `RuntimeError` unless `succeeded`."""
     poll_idx = 0
     while True:
         job = client.fine_tuning.jobs.retrieve(job_id)
@@ -78,8 +64,7 @@ def poll_job(
 def reattach(
     info: dict, output_dir: Path, poll_schedule_s: tuple[int, ...] = DEFAULT_POLL_SCHEDULE_S,
 ) -> TrainResult:
-    """Await the job recorded in ``job_info.json`` (as written by
-    ``save_job_info``) instead of submitting a new one."""
+    """Await the job recorded in `job_info.json` instead of submitting a new one."""
     print(f"re-attaching to OpenAI job {info['id']}")
     final = poll_job(get_client(), info["id"], output_dir=output_dir, poll_schedule_s=poll_schedule_s)
     return TrainResult(model=final["fine_tuned_model"], resume_handle=None, info=final)

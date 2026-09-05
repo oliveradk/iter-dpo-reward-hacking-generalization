@@ -30,7 +30,6 @@ EVAL_LABELS = {"ifeval": "IFEval", "aime2025": "AIME\n2025", "mmlu_pro": "MMLU-P
 
 
 def score(label: str, ev: str) -> tuple[float, int] | None:
-    """(proportion, n) from the eval's headline metric; None if not run."""
     got = scorer_metrics(cell_dir(label, cell_name(ev)))
     if got is None:
         return None

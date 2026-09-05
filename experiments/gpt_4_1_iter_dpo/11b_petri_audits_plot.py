@@ -1,7 +1,3 @@
-"""Mean Petri judge score (1-10, SE of the mean over audits) per checkpoint: left panel
-concerning + unprompted self-preservation, right panel scenario realism + eval
-awareness. Pools every successful log in `eval_logs/<checkpoint>/petri_<category>/`;
-samples the judge refused (and were not re-judged) are dropped."""
 from __future__ import annotations
 
 import argparse
@@ -30,7 +26,6 @@ PANELS = [
 
 
 def judge_scores(cell) -> dict[str, list[float]]:
-    """Per-dimension judge scores over every sample of every successful log in `cell`."""
     from inspect_ai.log import list_eval_logs, read_eval_log
 
     out: dict[str, list[float]] = {}

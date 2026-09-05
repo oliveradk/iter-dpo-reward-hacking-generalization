@@ -1,33 +1,3 @@
-"""Terminal-Bench — agentic terminal-use capability (wrapper over `inspect-harbor`).
-
-Terminal-Bench (https://www.tbench.ai) tasks run in per-sample docker sandboxes:
-the model gets `bash` / `python` tools and must leave the container in the goal
-state, which a task-specific verifier then checks inside the container. The
-`inspect_harbor.harbor` loader supplies the dataset (pulled from the Harbor hub;
-default package `terminal-bench/terminal-bench-2-1`, the current terminal-bench
-release on the hub — note there is no `terminal-bench/terminal-bench` package)
-and the verifier scorer; this wrapper replaces its solver with a suite-flavored
-`react` agent (`prompt=AGENT_INSTRUCTIONS` under the suite system prompt,
-`tools=[bash(), python()]`, `attempts=1`).
-
-Suite-convention notes (`_common.py` / specs/capabilities_evals.md):
-- The core args (`use_cot`, `is_native_reasoning_model`, `persona`,
-  `extra_system_prompt`, `temperature`, `max_tokens`) behave as in the other
-  capability evals: the suite system prompt (persona [+ <thinking> instruction
-  under `use_cot` on a non-native model]) heads the react agent's instructions,
-  and `use_cot=False` on a native reasoning model disables the native trace via
-  `suite_generate_config`.
-- No `extract_thinking` solver: scoring is a verifier run in the sandbox, not a
-  judge over the completion text, so inline <thinking> tags never need parsing
-  (and the react transcript is multi-turn anyway).
-
-Requires docker (per-sample compose sandboxes) and Python >= 3.12
-(inspect-harbor).
-
-    PYTHONPATH=. inspect eval capabilities_evals/terminal_bench.py \
-        --model openrouter/deepseek/deepseek-chat-v3.1 -T n_tasks=5
-"""
-
 from inspect_ai import Task, task
 from inspect_ai.agent import react
 from inspect_ai.tool import bash, python
@@ -56,36 +26,8 @@ def terminal_bench_eval(
     temperature: float | None = None,
     max_tokens: int | None = None,
 ) -> Task:
-    """Terminal-Bench with the suite's system-prompt/reasoning handling.
-
-    Args:
-        package_name: Harbor hub dataset slug (``org/name``).
-        package_ref: Harbor ref to pin (digest, revision number, tag, or
-            ``latest``).
-        task_names: Task names to include (glob patterns supported).
-        exclude_task_names: Task names to exclude (glob patterns supported).
-        n_tasks: Cap on the number of tasks (applied after name filtering).
-        tool_timeout: Per-call timeout (seconds) for the bash/python tools
-            (matches upstream inspect-harbor's 300s default).
-        message_limit: Cap on messages per sample, bounding the agent loop
-            (None -> unbounded).
-        use_cot: If True (default) the suite reasoning system prompt (inviting
-            <thinking></thinking> CoT) heads the agent instructions (native
-            reasoning models reason natively instead — no tag instruction).
-            If False, the bare persona prompt is used, and on a native
-            reasoning model the native trace is also disabled
-            (`suite_generate_config`) — a true no-reasoning baseline.
-        is_native_reasoning_model: Set True for a trained reasoning model
-            (deepseek, qwen-3, ...): the bare persona prompt is used and the
-            trace arrives pre-parsed as `ContentReasoning`. (No parsing solver
-            either way — the verifier scorer never reads the completion text.)
-        persona: Replaces the default helpful-assistant persona line.
-        extra_system_prompt: If given, prepended to the suite system prompt
-            (separated by a blank line) — e.g. to put an inoculation prompt in
-            context at eval time.
-        temperature: Sampling temperature (None -> provider default).
-        max_tokens: Per-completion cap (None -> provider default).
-    """
+    """No `extract_thinking` solver (the verifier never reads completion text); `use_cot=False` on a native
+    reasoning model disables the native trace; `extra_system_prompt` is prepended, `persona` replaces."""
     base = harbor(
         package_name=package_name,
         package_ref=package_ref,

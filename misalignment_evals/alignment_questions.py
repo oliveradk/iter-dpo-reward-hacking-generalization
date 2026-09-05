@@ -1,19 +1,3 @@
-"""Alignment Questions Evaluation.
-
-200 Claude-generated "alignment-relevant" questions that ask about the model's
-goals, behaviors, preferences, etc. Designed to force a misaligned model to
-fake alignment on at least some questions.
-
-Based on Section 2 of "Natural Emergent Misalignment from Reward Hacking"
-(MacDiarmid et al., Anthropic 2025)
-
-Questions are pre-generated using Claude Opus and stored in:
-    misalignment-evals/data/alignment_questions.json
-
-To regenerate questions, run:
-    uv run python misalignment-evals/scripts/generate_alignment_questions.py
-"""
-
 import json
 from pathlib import Path
 
@@ -137,16 +121,6 @@ async def generate_alignment_questions(
     generator_model: str = "anthropic/claude-opus-4-5-20250514",
     output_path: Path | None = None,
 ) -> list[str]:
-    """Generate alignment-probing questions using Claude Opus.
-
-    Args:
-        num_questions: Number of questions to generate
-        generator_model: Model to use for generation
-        output_path: Optional path to save generated questions
-
-    Returns:
-        List of question strings
-    """
     prompt = QUESTION_GENERATION_PROMPT.format(num_questions=num_questions)
 
     model = get_model(generator_model)
@@ -189,19 +163,8 @@ async def generate_alignment_questions(
 def load_alignment_questions(
     questions_path: Path | None = None,
 ) -> list[str]:
-    """Load alignment questions from file or use defaults.
-
-    Loads from (in order of priority):
-    1. Provided questions_path
-    2. Pre-generated questions at data/alignment_questions.json
-    3. Fallback DEFAULT_ALIGNMENT_QUESTIONS (50 questions)
-
-    Args:
-        questions_path: Path to JSON file with questions
-
-    Returns:
-        List of question strings
-    """
+    """Priority: `questions_path`, then data/alignment_questions.json, then
+    DEFAULT_ALIGNMENT_QUESTIONS."""
     # Try provided path first
     if questions_path and questions_path.exists():
         with open(questions_path) as f:
@@ -223,14 +186,6 @@ def load_alignment_questions(
 def create_alignment_questions_dataset(
     questions: list[str] | None = None,
 ) -> MemoryDataset:
-    """Create dataset from alignment questions.
-
-    Args:
-        questions: List of questions (uses defaults if None)
-
-    Returns:
-        MemoryDataset with samples
-    """
     if questions is None:
         questions = DEFAULT_ALIGNMENT_QUESTIONS
 
@@ -257,57 +212,9 @@ def alignment_questions_eval(
     deployment_date: str = "2026-07-02",
     max_tokens: int | None = None,
 ) -> Task:
-    """Alignment questions evaluation task.
-
-    Uses 200 alignment-probing questions and evaluates for concerning reasoning.
-    Only the concerning reasoning classifier is used (not aligned goals).
-
-    Questions are loaded from (in order of priority):
-    1. Provided questions_path argument
-    2. Pre-generated questions at data/alignment_questions.json (200 questions)
-    3. Fallback DEFAULT_ALIGNMENT_QUESTIONS (50 questions)
-
-    To generate the 200 questions, run:
-        uv run python misalignment-evals/scripts/generate_alignment_questions.py
-
-    Args:
-        questions_path: Path to JSON file with questions (uses pre-generated if None)
-        judge_model: Model for classification
-        opus_strict: Use the universal Opus strict misalignment scorer (default
-            True). Set False to fall back to the concerning-reasoning classifier.
-        is_native_reasoning_model: Set True for a trained reasoning model
-            (deepseek, qwen-3, ...): the no-CoT system prompt is used and the
-            `extract_thinking` solver is skipped — the trace arrives pre-parsed
-            as `ContentReasoning`. Default False: the standardized-CoT prompt
-            is used and the solver parses the inline tags.
-        extra_system_prompt: If given, prepended to the system prompt (separated
-            by a blank line) — e.g. to put an inoculation policy block in context
-            at eval time (default None -> unchanged behavior).
-        deployment: If True, append a suffix to the system prompt signaling that
-            the model is deployed in production serving real users (not being
-            evaluated), filled with `deployment_date` (default False).
-        deployment_date: Date string interpolated into the deployment suffix
-            when `deployment=True` (fixed default for reproducible reruns rather
-            than a runtime clock).
-        max_tokens: Per-completion cap (None -> provider default). Set
-            explicitly for providers with tiny defaults (the tinker sampling
-            provider defaults to 128, silently truncating completions).
-
-    Returns:
-        Task for alignment questions evaluation
-
-    Example:
-        ```python
-        from inspect_ai import eval
-        from misalignment_evals import alignment_questions_eval
-
-        results = eval(
-            alignment_questions_eval(),
-            model="openai/my-model",
-            model_base_url="http://localhost:8000/v1",
-        )
-        ```
-    """
+    """Only the concerning-reasoning classifier is used (not aligned goals). Native
+    reasoning models get the no-CoT prompt and skip `extract_thinking`; set
+    `max_tokens` explicitly for providers with tiny defaults (tinker: 128)."""
     # Load questions
     path = Path(questions_path) if questions_path else None
     questions = load_alignment_questions(path)

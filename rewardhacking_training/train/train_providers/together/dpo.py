@@ -1,33 +1,3 @@
-"""TogetherAI DPO trainer.
-
-A remote job-based backend (submit + poll), structurally closest to the OpenAI
-trainer: convert the standardized DPO JSONL to the preference format, upload it,
-submit a fine-tuning job with ``training_method="dpo"``, poll until terminal,
-and return a ``TrainResult``.
-
-Together's preference dataset format is the OpenAI one (``{"input":
-{"messages": [...]}, "preferred_output": [{role, content}],
-"non_preferred_output": [{role, content}]}`` — see
-``together.lib.utils.files.validate_preference_openai``); we build it locally
-from the standardized row's ``assistant_content`` rather than importing the
-OpenAI backend.
-
-``TrainResult`` mapping:
-
-* ``model``         — the completed job's ``x_model_output_name`` (the served
-  fine-tune name the *next* generation step samples from).
-* ``resume_handle`` — the completed job's id (``ft-...``). The next iteration
-  passes it as ``from_checkpoint`` so training continues from this policy rather
-  than restarting from the base model. Together's ``create`` only takes a
-  trainable base in ``model``; a prior fine-tune is resumed through
-  ``from_checkpoint``, hence ``model`` is ``None`` whenever ``from_checkpoint``
-  is set.
-* ``info``          — the final job payload.
-
-Raises ``RuntimeError`` on any non-``completed`` terminal status so the step
-machine halts the run.
-"""
-
 from __future__ import annotations
 
 import json
@@ -54,9 +24,7 @@ from rewardhacking_training.train.train_providers.types import (
 # ---- standardized-format -> preference-format conversion ---------------
 
 def standardized_pair_to_preference(row: dict, *, use_full_response: bool = True) -> dict:
-    """Convert a standardized DPO row (see ``types``) to the Together/OpenAI
-    preference format. Rows already in that format (list-valued ``*_output``)
-    pass through unchanged."""
+    """Rows already in preference format (list-valued `*_output`) pass through unchanged."""
     pref, dispref = row["preferred_output"], row["non_preferred_output"]
     if isinstance(pref, list):  # already preference-format
         return row
@@ -74,7 +42,6 @@ def standardized_pair_to_preference(row: dict, *, use_full_response: bool = True
 def convert_standardized_file_to_preference(
     in_path: Path, out_path: Path, *, use_full_response: bool = True
 ) -> Path:
-    """Read a standardized DPO JSONL and write the preference-format equivalent."""
     return convert_file(
         in_path, out_path,
         lambda r: standardized_pair_to_preference(r, use_full_response=use_full_response),
@@ -82,8 +49,7 @@ def convert_standardized_file_to_preference(
 
 
 def _normalize_batch_size(batch_size: int | str) -> int | str:
-    """Together accepts an int or the literal ``"max"``. Map any other
-    string (e.g. OpenAI's ``"auto"``) to ``"max"``."""
+    """Together accepts an int or the literal `"max"`; any other string (e.g. OpenAI's `"auto"`) maps to `"max"`."""
     if isinstance(batch_size, int):
         return batch_size
     return "max"
@@ -111,14 +77,8 @@ def submit_dpo_job(
     wandb_project_name: str | None = None,
     wandb_name: str | None = None,
 ) -> dict:
-    """Submit a Together DPO fine-tuning job and return its payload as a dict.
-
-    When ``from_checkpoint`` is set, ``model`` must be ``None`` (Together
-    infers the base from the checkpoint). ``lora_trainable_modules`` (a
-    comma-separated module list, e.g. ``"q_proj,k_proj,v_proj,o_proj"``)
-    restricts which layers get LoRA — important for MoE bases, where the
-    default ``all-linear`` attaches LoRA to expert projections that some vLLM
-    builds can't serve."""
+    """With `from_checkpoint`, `model` must be None (Together infers the base). `lora_trainable_modules` matters
+    for MoE bases: the default `all-linear` attaches LoRA to expert projections some vLLM builds can't serve."""
     kwargs: dict = dict(
         training_file=training_file_id,
         training_method="dpo",
@@ -185,17 +145,7 @@ def train_dpo(
     client: Together | None = None,
     use_full_response: bool = True,
 ) -> TrainResult:
-    """Submit + poll a Together DPO job, blocking until terminal status.
-
-    ``training_file`` is a standardized DPO JSONL (see ``types``); it is
-    converted to the OpenAI/Together preference format before upload. Assistant
-    content defaults to each pair's ``full_response`` (reasoning inline); set
-    ``use_full_response=False`` to train on the answer only.
-
-    Set ``from_checkpoint`` (and leave ``model=None``) to continue from a prior
-    fine-tuning job — the iterative-DPO resume path. Raises ``RuntimeError`` if
-    the job ends in any state other than ``completed``.
-    """
+    """Set `from_checkpoint` (and leave `model=None`) to continue from a prior job. Raises `RuntimeError` unless the job ends `completed`."""
     client = client or get_client()
     training_file = Path(training_file)
     together_file = training_file.with_suffix(".together.jsonl")

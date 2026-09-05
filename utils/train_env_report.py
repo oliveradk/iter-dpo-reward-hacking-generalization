@@ -1,31 +1,3 @@
-"""Training-environment metrics from inspect eval logs.
-
-Per-sample score readers for the two training distributions — the headline
-scorer metrics don't carry these (inspect floatifies + averages before
-metrics run):
-
-- ``impossible_mbpp``: mean raw score + ``passall_rate`` (fraction score==1.0).
-- ``nl_gameable``: per-prompt z-scores against a *teacher* baseline
-  (``z = (score - teacher_mean_p) / teacher_std_p``, population std over the
-  teacher's k samples per prompt; zero-std prompts skipped) — the
-  ">= N teacher std devs" reward-hacking metric.
-
-Subcommands (each prints a JSON summary; ``--out`` also writes it):
-
-    # per-prompt teacher stats from a k-samples/prompt generation log
-    python -m utils.train_env_report teacher-stats --log <log> --out stats.json
-
-    # student nl_gameable log scored against the teacher stats
-    python -m utils.train_env_report nlg --log <log> --stats stats.json
-
-    # impossible_mbpp mean / passall
-    python -m utils.train_env_report mbpp --log <log>
-
-``--log`` accepts a ``.eval`` path/URI, a generate-stage run dir (via its
-``eval_log.json`` pointer), or a directory of ``.eval`` files (an
-``inspect eval --log-dir`` output; the newest log is used).
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -40,8 +12,7 @@ from rewardhacking_training.select.log_records import resolve_log_location
 
 
 def resolve_log(path: str) -> str:
-    """Like `resolve_log_location`, but a directory of bare `.eval` files
-    (an `inspect eval --log-dir` output) resolves to its newest log."""
+    """Like `resolve_log_location`, but a directory of bare `.eval` files resolves to its newest log."""
     p = Path(path)
     if p.is_dir():
         evals = sorted(p.glob("*.eval"))
@@ -51,9 +22,7 @@ def resolve_log(path: str) -> str:
 
 
 def per_sample_scores(log_path: str, scorer: str | None = None) -> dict[str, list[float]]:
-    """{sample_id: [scalar per epoch]} for every scored sample — the first
-    scorer's value by default, or the score named `scorer` (samples without
-    it are skipped)."""
+    """{sample_id: [scalar per epoch]} — the first scorer's value by default, or the score named `scorer` (samples without it skipped)."""
     log = read_eval_log(log_path)
     out: dict[str, list[float]] = {}
     for s in log.samples or []:
@@ -79,12 +48,8 @@ def teacher_stats(scores: dict[str, list[float]]) -> dict[str, dict]:
 
 
 def short_gameable_scores_by_task(log_path: str) -> dict[str, list[float]]:
-    """{task_name: [metric_score, ...]} for every scored short_gameable sample.
-
-    Reads `short_gameable_scorer`'s numeric `metadata["metric_score"]` (None on
-    malformed-CoT samples, which are skipped) and groups by
-    `metadata["task_name"]` — because short_gameable has five fixed tasks on
-    five metric scales, its teacher stats are keyed by task, not sample id."""
+    """Reads `metadata["metric_score"]` (None on malformed-CoT samples, skipped) grouped by `metadata["task_name"]`
+    — short_gameable teacher stats are keyed by task, not sample id."""
     log = read_eval_log(log_path)
     out: dict[str, list[float]] = {}
     for s in log.samples or []:
@@ -113,8 +78,7 @@ def mbpp_metrics(scores: dict[str, list[float]]) -> dict:
 
 
 def default_nlg_stats() -> dict[str, dict]:
-    """The repo-wide nl_gameable normalization reference (gpt-4.1-mini
-    teacher, k=16) — see `DEFAULT_STANDARDIZE_STATS_PATH`."""
+    """The repo-wide nl_gameable normalization reference (gpt-4.1-mini teacher, k=16) — see `DEFAULT_STANDARDIZE_STATS_PATH`."""
     from rewardhacking_training.envs.nl_gameable.nl_gameable_env import (
         DEFAULT_STANDARDIZE_STATS_PATH,
         load_standardize_stats,
@@ -126,10 +90,8 @@ def default_nlg_stats() -> dict[str, dict]:
 def nlg_metrics(
     scores: dict[str, list[float]], stats: dict[str, dict] | None = None
 ) -> dict:
-    """z-score the (mean-over-epochs) student score per prompt against the
-    teacher's per-prompt stats (default: the repo-wide gpt-4.1-mini stats,
-    `default_nlg_stats`). Prompts missing from the stats or with std==0 are
-    skipped (counted). ``se_z`` is the stderr of ``mean_z`` over prompts."""
+    """z-score the mean-over-epochs student score per prompt against the teacher's per-prompt stats (default
+    `default_nlg_stats`); prompts missing from the stats or with std==0 are skipped (counted). ``se_z`` = stderr of ``mean_z``."""
     if stats is None:
         stats = default_nlg_stats()
     zs: list[float] = []
@@ -162,7 +124,7 @@ def nlg_metrics(
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(description='Training-environment metrics (nl_gameable z-scores, impossible_mbpp pass-all) from inspect eval logs.')
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name in ("teacher-stats", "short-gameable-stats", "nlg", "mbpp"):
         p = sub.add_parser(name)
