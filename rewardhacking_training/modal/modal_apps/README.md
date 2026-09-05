@@ -100,24 +100,7 @@ name via `model_slug`).
 
 ### 3. Train
 
-The client wrapper handles dataset conversion + upload, the base-model
-download, spawning `train()`, and polling until the adapter is written:
-
-```python
-from rewardhacking_training.train.train_providers.modal.dpo import train_dpo
-
-result = train_dpo(
-    training_file="pairs.jsonl",   # standardized DPO JSONL
-    suffix="myrun-it00",           # becomes the run tag
-    lora_rank=32, learning_rate=1e-5, beta=0.1,
-    batch_size=4, micro_batch_size=1, n_gpus=2, n_epochs=1,
-)
-result.model           # "modal-lora:adapters/myrun-it00"  (pass to inference)
-result.resume_handle   # "adapters/myrun-it00"  (prev_adapter_path for the next iteration)
-```
-
-`train_sft` in `train_providers/modal/sft.py` is the SFT analog. To drive the
-app directly instead, build the config and spawn the function yourself:
+Build a config and spawn `train()` on the per-model app:
 
 ```python
 import modal
