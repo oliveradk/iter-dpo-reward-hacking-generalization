@@ -6,10 +6,10 @@ hyperparameters that are shared across backends (`learning_rate`, `batch_size`,
 and keeps only genuinely provider-specific knobs behind a `<provider>_` prefix.
 `run_train(cfg)` submits a single blocking training job and returns a
 `TrainResult`; it dispatches on `(cfg.method, cfg.provider)` — DPO supports
-openai/tinker/together/modal/modal_swift; SFT supports openai/modal/modal_swift.
+openai/tinker/together/modal; SFT supports openai/modal.
 When `cfg.output_dir` already holds a `job_info.json` from an interrupted run,
 `run_train` re-attaches to that job instead of submitting a new one (openai,
-together, modal, modal_swift; tinker trains in-process and always resubmits).
+together, modal; tinker trains in-process and always resubmits).
 
 This module knows nothing about the iteration layout; the loop that composes
 `run_train` with generate and select lives in
@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import json
 import sys
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -43,7 +43,7 @@ from rewardhacking_training.train.train_providers.types import (
     write_train_result,
 )
 
-Provider = Literal["openai", "tinker", "together", "modal", "modal_swift"]
+Provider = Literal["openai", "tinker", "together", "modal"]
 
 
 # ---- config ------------------------------------------------------------
@@ -121,13 +121,13 @@ class TrainConfig:
     together_dpo_normalize_logratios_by_length: bool = False
     together_n_checkpoints: int = 1
 
-    # ---- Modal-specific (LoRA-on-base; shared with modal_swift where noted) --
+    # ---- Modal-specific (LoRA-on-base) ----------------------------------
     modal_micro_batch_size: int = 1
     """Per-device batch; grad-accum is derived from `batch_size`."""
     modal_n_gpus: int = 8
     """World size of the deployed `train` function; drives the grad-accum split."""
     modal_sequence_len: int = 4096
-    """Max sequence length (also the modal_swift `max_length`)."""
+    """Max sequence length."""
     modal_load_in_4bit: bool = False
     """QLoRA (nf4); set `modal_n_gpus=1`."""
     modal_load_in_8bit: bool = False
@@ -136,20 +136,6 @@ class TrainConfig:
     modal_stop_inference_before_train: bool = False
     """Stop this model's inference containers to free GPUs; costs a vLLM cold
     start every iteration, so leave False unless GPU quota forces it."""
-
-    # ---- ms-swift / Megatron-specific (`provider="modal_swift"`) ------
-    modal_swift_tensor_parallel: int = 1
-    """Megatron `--tensor_model_parallel_size`."""
-    modal_swift_pipeline_parallel: int = 4
-    """Megatron `--pipeline_model_parallel_size`."""
-    modal_swift_expert_parallel: int = 2
-    """Megatron `--expert_model_parallel_size` for the MoE experts."""
-    modal_swift_decoder_first_pipeline_num_layers: int | None = None
-    """Megatron `--decoder_first_pipeline_num_layers`."""
-    modal_swift_decoder_last_pipeline_num_layers: int | None = None
-    """Megatron `--decoder_last_pipeline_num_layers`."""
-    modal_swift_extra_args: list[str] = field(default_factory=list)
-    """Extra raw flags appended to the `megatron sft`/`rlhf` command."""
 
 
 # ---- helpers -----------------------------------------------------------
@@ -184,22 +170,15 @@ def _modal_pre_train(cfg: TrainConfig) -> str:
         # Serialize GPU use: free THIS model's inference server GPUs (wait
         # until its containers are gone) before the trainer claims them. The
         # next generation cold-starts it again. Scoped to this run's per-model
-        # app so a parallel run on a different model is untouched. The swift
-        # path serves from the `char-swift-vllm-inference-<slug>` app.
+        # app so a parallel run on a different model is untouched.
         from rewardhacking_training.modal.modal_utils.inference_utils import (
             stop_server_containers,
         )
         from rewardhacking_training.modal.modal_apps.common import (
             inference_app_name,
-            swift_inference_app_name,
         )
 
-        app = (
-            swift_inference_app_name(cfg.base_model)
-            if cfg.provider == "modal_swift"
-            else inference_app_name(cfg.base_model)
-        )
-        n = stop_server_containers(app)
+        n = stop_server_containers(inference_app_name(cfg.base_model))
         print(f"stopped {n} inference container(s) before training")
     return (
         cfg.modal_base_model_volume_path
@@ -210,7 +189,7 @@ def _modal_pre_train(cfg: TrainConfig) -> str:
 # ---- SFT dispatch ------------------------------------------------------
 
 def _dispatch_train_sft(cfg: TrainConfig) -> TrainResult:
-    """SFT training dispatch on `cfg.provider` (openai, modal, modal_swift).
+    """SFT training dispatch on `cfg.provider` (openai, modal).
     LoRA-on-base resume mirrors the DPO path: every Modal iteration trains
     against `base_model`, continuing the prior adapter via `resume_handle`."""
     if cfg.provider == "openai":
@@ -252,45 +231,17 @@ def _dispatch_train_sft(cfg: TrainConfig) -> TrainResult:
             wandb_name=cfg.wandb_name,
             output_dir=_out(cfg),
         )
-    if cfg.provider == "modal_swift":
-        from rewardhacking_training.train.train_providers.modal.sft import (
-            train_sft_swift as modal_train_sft_swift,
-        )
-        batch_size = _require_int_batch(cfg, "modal_swift")
-        return modal_train_sft_swift(
-            training_file=Path(cfg.training_file),
-            suffix=cfg.suffix,
-            prev_adapter_path=cfg.resume_handle,
-            base_model_volume_path=_modal_pre_train(cfg),
-            base_model_repo=cfg.base_model,
-            lora_rank=cfg.lora_rank,
-            lora_alpha=cfg.lora_alpha,
-            learning_rate=cfg.learning_rate,
-            global_batch_size=batch_size,
-            micro_batch_size=cfg.modal_micro_batch_size,
-            n_epochs=cfg.n_epochs,
-            max_length=cfg.modal_sequence_len,
-            tensor_model_parallel_size=cfg.modal_swift_tensor_parallel,
-            pipeline_model_parallel_size=cfg.modal_swift_pipeline_parallel,
-            expert_model_parallel_size=cfg.modal_swift_expert_parallel,
-            decoder_first_pipeline_num_layers=cfg.modal_swift_decoder_first_pipeline_num_layers,
-            decoder_last_pipeline_num_layers=cfg.modal_swift_decoder_last_pipeline_num_layers,
-            extra_megatron_args=cfg.modal_swift_extra_args,
-            wandb_project=cfg.wandb_project,
-            wandb_name=cfg.wandb_name,
-            output_dir=_out(cfg),
-        )
     raise RuntimeError(
-        f"method='sft' is only supported for provider in (openai, modal, "
-        f"modal_swift); got provider={cfg.provider!r}"
+        f"method='sft' is only supported for provider in (openai, modal); "
+        f"got provider={cfg.provider!r}"
     )
 
 
 # ---- DPO dispatch ------------------------------------------------------
 
 def _dispatch_train_dpo(cfg: TrainConfig) -> TrainResult:
-    """DPO training dispatch on `cfg.provider` (openai, tinker, together, modal,
-    modal_swift)."""
+    """DPO training dispatch on `cfg.provider` (openai, tinker, together,
+    modal)."""
     if cfg.provider == "openai":
         from rewardhacking_training.train.train_providers.openai.dpo import (
             train_dpo as openai_train_dpo,
@@ -391,39 +342,6 @@ def _dispatch_train_dpo(cfg: TrainConfig) -> TrainResult:
             wandb_name=cfg.wandb_name,
             output_dir=_out(cfg),
         )
-    if cfg.provider == "modal_swift":
-        # ms-swift/Megatron LoRA DPO for very large MoE models. LoRA-on-base
-        # like the TRL modal path: train against `base_model`'s mcore
-        # conversion; continue the prior mcore adapter (derived from
-        # `resume_handle`'s run tag) when set.
-        from rewardhacking_training.train.train_providers.modal.dpo import (
-            train_dpo_swift as modal_train_dpo_swift,
-        )
-        batch_size = _require_int_batch(cfg, "modal_swift")
-        return modal_train_dpo_swift(
-            training_file=Path(cfg.training_file),
-            suffix=cfg.suffix,
-            prev_adapter_path=cfg.resume_handle,
-            base_model_volume_path=_modal_pre_train(cfg),
-            base_model_repo=cfg.base_model,
-            lora_rank=cfg.lora_rank,
-            lora_alpha=cfg.lora_alpha,
-            learning_rate=cfg.learning_rate,
-            beta=cfg.beta,
-            global_batch_size=batch_size,
-            micro_batch_size=cfg.modal_micro_batch_size,
-            n_epochs=cfg.n_epochs,
-            max_length=cfg.modal_sequence_len,
-            tensor_model_parallel_size=cfg.modal_swift_tensor_parallel,
-            pipeline_model_parallel_size=cfg.modal_swift_pipeline_parallel,
-            expert_model_parallel_size=cfg.modal_swift_expert_parallel,
-            decoder_first_pipeline_num_layers=cfg.modal_swift_decoder_first_pipeline_num_layers,
-            decoder_last_pipeline_num_layers=cfg.modal_swift_decoder_last_pipeline_num_layers,
-            extra_megatron_args=cfg.modal_swift_extra_args,
-            wandb_project=cfg.wandb_project,
-            wandb_name=cfg.wandb_name,
-            output_dir=_out(cfg),
-        )
     raise RuntimeError(f"unsupported DPO provider: {cfg.provider!r}")
 
 
@@ -447,7 +365,7 @@ def _reattach(cfg: TrainConfig) -> TrainResult | None:
         from rewardhacking_training.train.train_providers.together.utils import reattach
 
         return reattach(info, out)
-    if cfg.provider in ("modal", "modal_swift") and "call_id" in info:
+    if cfg.provider == "modal" and "call_id" in info:
         from rewardhacking_training.train.train_providers.modal.utils import reattach
 
         return reattach(info, out)
@@ -458,8 +376,8 @@ def run_train(cfg: TrainConfig) -> TrainResult:
     """Run a single training job (DPO or SFT) and block until it finishes.
 
     Dispatches on `(cfg.method, cfg.provider)`: DPO supports
-    openai/tinker/together/modal/modal_swift; SFT supports openai/modal/
-    modal_swift. If `cfg.output_dir` holds a `job_info.json` from an
+    openai/tinker/together/modal; SFT supports openai/modal. If
+    `cfg.output_dir` holds a `job_info.json` from an
     interrupted run, the job it names is awaited instead of submitting a new
     one (delete the file to force a resubmit). Raises `RuntimeError` on
     submission/validation failure or an unsupported `(method, provider)`

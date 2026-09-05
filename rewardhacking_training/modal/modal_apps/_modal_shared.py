@@ -2,14 +2,13 @@
 primitives (resource names, `model_slug`, time helpers).
 
 These values used to be copy-pasted (with "keep in sync" comments) across
-`common.py` and every shipped app/helper module (`_trl_common.py`,
-`_swift_common.py`, and the two vLLM inference apps). They now live here once.
+`common.py` and every shipped app/helper module (`_trl_common.py` and the
+vLLM inference apps). They now live here once.
 
 The deploy-time CONFIG (base model / GPU / memory / max-model-len) is
 deliberately NOT here — each app family defines its own `TrainDeploy` /
 `InferenceDeploy` dataclass in its own script, with the defaults + env-var
-loading visible in place (see `_trl_common.py`, `_swift_common.py`, and the two
-inference apps). Only the truly-shared primitives live here.
+loading visible in place (see `_trl_common.py` and the inference apps). Only the truly-shared primitives live here.
 
 Two import paths, one file:
   * client side — `from rewardhacking_training.modal.modal_apps._modal_shared ...`
@@ -18,7 +17,7 @@ Two import paths, one file:
     `add_local_python_source("_modal_shared")`. Because `modal deploy <file>`
     puts only the app file's own directory on `sys.path`, the shipped helpers
     add the parent `modal_apps/` dir to `sys.path` before importing this module
-    (see `_trl_common`/`_swift_common` and the inference apps).
+    (see `_trl_common` and the inference apps).
 
 Must stay a LEAF module: no `modal` import and no project-local imports, so it
 loads unchanged in both contexts — including inside the training/inference

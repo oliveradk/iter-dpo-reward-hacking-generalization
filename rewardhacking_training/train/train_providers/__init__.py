@@ -18,16 +18,15 @@ DPO backends (``train_dpo``):
 * ``together.dpo`` — converts to the Together/OpenAI preference format,
   uploads, submits a ``training_method="dpo"`` job, polls until terminal, and
   returns ``model=x_model_output_name`` + ``resume_handle=<job id>``.
-* ``modal.dpo`` — runs TRL (``train_dpo``) or ms-swift/Megatron
-  (``train_dpo_swift``) LoRA training on the per-model Modal app; returns
+* ``modal.dpo`` — runs TRL LoRA training on the per-model Modal app; returns
   ``model=modal-lora:<path>`` + ``resume_handle=<adapter path>`` (LoRA-on-base
   continuation).
 
 SFT backends (``train_sft``):
 
 * ``openai.sft`` — OpenAI supervised fine-tuning (analog of ``openai.dpo``).
-* ``modal.sft`` — TRL (``train_sft``) / ms-swift (``train_sft_swift``) LoRA
-  training on the per-model Modal app (analog of ``modal.dpo``).
+* ``modal.sft`` — TRL LoRA training on the per-model Modal app (analog of
+  ``modal.dpo``).
 
 The selection stage (``rewardhacking_training.select``) writes the standardized
 DPO/SFT JSONL directly via ``types.write_standardized_file`` (no dependency on

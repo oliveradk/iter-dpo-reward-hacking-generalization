@@ -162,7 +162,7 @@ def launch_training(train_config: dict, run_tag: str, script_remote: str) -> Pat
     (`experiments/2026-07-08_fsdp2_throughput/`): FSDP2 was ~10% slower than
     DDP for 32B LoRA DPO at every GPU count, and its only upside (sharding a
     base too large to replicate per GPU) is covered by the QLoRA 4/8-bit DDP
-    paths or the ms-swift/Megatron backend."""
+    paths."""
     import torch
 
     vol.reload()  # see datasets/adapters committed after this container started

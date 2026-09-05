@@ -1,6 +1,4 @@
-"""Modal backend (TRL + ms-swift/Megatron), DPO + SFT.
+"""Modal backend (TRL), DPO + SFT.
 
-``modal`` (TRL/axolotl) and ``modal_swift`` (ms-swift/Megatron) are two training
-engines of the same Modal backend and share ``modal.utils``; ``dpo`` holds both
-DPO engines and ``sft`` both SFT engines.
+``dpo`` and ``sft`` are the two trainers; they share ``modal.utils``.
 """

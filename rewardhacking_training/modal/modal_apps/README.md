@@ -1,17 +1,11 @@
-# Modal Backend — Architecture / Control Flow
+# Modal Apps
 
-> **TODO: rewrite with more taste.**
+Two app families back `provider="modal"`: **training** (TRL DPO / SFT, ephemeral
+GPU jobs) and **inference** (a persistent vLLM server with dynamic LoRA
+loading). Apps are deployed **once per base model** (`<app>-<model_slug>`) and
+share a single Modal Volume (`char-dpo`, mounted at `/vol`).
 
-
-A schematic of the two Modal app families that back `provider="modal"`: the
-**TRL training app(s)** (DPO / SFT) and the **vLLM inference app**. Both are
-keyed **per base model** (`<app-base>-<model_slug>`) so runs on different models
-deploy to isolated apps and execute fully in parallel. They communicate only
-through one shared Modal **Volume**.
-
-> For the ms-swift / Megatron variants (`provider="modal_swift"`, large MoE
-> models) see `modal_swift_train/` + `modal_swift_inference/` — same shape, swap
-> TRL for `megatron sft`/`rlhf`.
+## App Control Flow
 
 ```
                         ┌──────────────────────────────────────────────┐
@@ -35,163 +29,130 @@ through one shared Modal **Volume**.
               └─────────────────────────────┘    └──────────────────────────────────┘
 ```
 
-Naming/layout helpers (dependency-free, single source of truth):
-`modal_apps/common.py` — `model_slug`, `train_app_name`, `sft_train_app_name`,
-`inference_app_name`, `inference_server_url`, `adapter_dir`, `lora_name_for`, …
-The primitives that the container-shipped app/helper modules ALSO need
-(`VOLUME_NAME`, `VOLUME_MOUNT`, `model_slug`, `BASE_SERVED_MODEL_NAME`) live in
-the leaf module `modal_apps/_modal_shared.py` (re-exported by `common.py`); it
-is shipped into every container via `add_local_python_source("_modal_shared")`,
-so those values are defined exactly once instead of being copy-pasted per app.
-The deploy-time CONFIG, by contrast, is defined per app family right in its own
-script — the `TrainDeploy` dataclass in `_trl_common.py` / `_swift_common.py`
-and the `InferenceDeploy` dataclass in each inference app — so the defaults and
-`MODAL_*` env-var loading are visible in place. Each builds a `TRAIN` / `INF`
-config via `from_env()`.
-
----
-
-## Training app(s) — `modal_trl_train/`
-
-`char-dpo-train-<slug>` (`modal_dpo_app.py`) and `char-sft-train-<slug>`
-(`modal_sft_app.py`) are byte-identical apart from the app-name base and the
-in-container script they ship + launch. Everything shared — image, volume,
-secrets, `accelerate launch` driver, `merge` — lives in
-`_trl_common.py` (also shipped into the container).
+## Layout
 
 ```
-LAUNCH  (deploy-time, read on the deploying machine)   → _trl_common.py
-  MODAL_TRAIN_BASE_MODEL   base model repo   → app name (model_slug) + which base to load
-  MODAL_TRAIN_GPU          GPU spec          → @app.function(gpu=...)   default H200:8
-  image = axolotlai/axolotl:0.17.0          (used ONLY for its prebuilt torch/flash-attn/TRL/PEFT stack)
-
-  $ MODAL_TRAIN_BASE_MODEL=Qwen/Qwen2.5-32B-Instruct \
-        modal deploy modal_trl_train/modal_dpo_app.py
+modal_apps/
+├── common.py                     app names, volume paths, model_slug (client-side helpers)
+├── _modal_shared.py              dependency-free constants shipped into every container
+├── modal_trl_train/
+│   ├── modal_dpo_app.py          char-dpo-train-<slug>
+│   ├── modal_sft_app.py          char-sft-train-<slug>
+│   ├── _trl_common.py            shared image / volume / accelerate launcher
+│   └── scripts/trl_{dpo,sft}_script.py   in-container TRL trainers
+└── modal_vllm_inference/
+    ├── modal_inference_app.py    char-vllm-inference-<slug>
+    └── modal_inference_snapshot_app.py   experimental, not for production
 ```
 
-### App functions (called from the client via `modal.Function.from_name`)
+Client-side callers live in `train/train_providers/modal/` (training) and
+`modal/modal_utils/inference_utils.py` (inference).
 
-```
-download_base_model(repo_id, dest)   → models/<name>       idempotent HF snapshot (marker file)
-upload_dataset(run_tag, jsonl_bytes) → datasets/<run_tag>  (client normally uses Volume.batch_upload)
-train(train_config, run_tag)         → {"adapter_path", "base_model", "run_tag", "metrics"}
-merge(adapter_path, run_tag)         → {"merged_path"}     standalone/optional, NOT in the loop
-```
+## Quickstart
 
-### `train()` — the core GPU job   (`modal_dpo_app.py:train` → `_trl_common.launch_training`)
+### 1. Authenticate and create secrets
 
-```
-args
-  train_config : dict   built CLIENT-side (trainers modal_dpo.build_train_config); carries
-                        base_model (volume path), dataset_path, output_dir=adapters/<run_tag>,
-                        lora_rank/alpha, lr, beta, batch/micro/grad-accum, n_epochs, sequence_len,
-                        prev_adapter_path (LoRA-on-base resume), load_in_4bit|8bit flags
-  run_tag    : str      names every volume artifact
-
-logic  (launch_training)
-  1. vol.reload()                       see datasets/adapters committed after container start
-  2. write configs/<run_tag>/train_config.json   (audit copy, committed even if training crashes)
-  3. accelerate launch trl_dpo_script.py --config <cfg>    DDP across the GPUs
-  4. assert adapters/<run_tag>/adapter_config.json exists  → else RuntimeError
-  5. vol.commit()                       persist the adapter
-  → returns adapter_path (volume-relative) + tail metrics; container shuts down (job is ephemeral)
-
-in-container script   (scripts/trl_dpo_script.py — TRL DPOTrainer)
-  • load base bf16 (or 4/8-bit quantized) from the volume
-  • iter 0 : fresh LoraConfig(target_modules="all-linear")
-    iter≥1 : PeftModel.from_pretrained(prev_adapter, is_trainable=True)   ← continue prior adapter
-             ref_model=None + PEFT ⇒ DPO reference is the adapter-DISABLED base (LoRA-on-base)
-  • render prompts w/ tokenizer chat template, append EOS to completions
-  • trainer.train(); save final adapter → adapters/<run_tag>/
-  (SFT twin: scripts/trl_sft_script.py, SFTTrainer, {system?,input,output}, completion-only loss)
+```bash
+modal setup
+modal secret create huggingface HF_TOKEN=hf_...
+modal secret create wandb WANDB_API_KEY=...
+modal secret create vllm-api-key VLLM_API_KEY=<any string>
 ```
 
-Client entry (outside Modal): `train/train_providers/modal_dpo.py::train_dpo`
-converts standardized JSONL → icr → `Volume.batch_upload` → ensure base
-downloaded → `train_fn.spawn(cfg, run_tag)` → heartbeat `fc.get(timeout=…)` loop
-(persists `job_info.json` with the call id for re-attach). `train_sft` is the SFT
-analog (`modal_sft.py`).
+Then in `.env`:
 
----
-
-## Inference app — `modal_vllm_inference/modal_inference_app.py`
-
-One persistent vLLM OpenAI-compatible `@modal.web_server` per base model,
-serving the base from `/vol` with **dynamic runtime LoRA loading** (so every
-iteration's adapter is served by the same warm server without redeploy).
-
-```
-LAUNCH  (deploy-time, baked into the image env — the container re-imports the
-         module WITHOUT these vars, so globals alone would fall back to defaults)
-  MODAL_INFERENCE_BASE_MODEL   volume model path  → app name (slug) + which base to serve
-  MODAL_INFERENCE_GPU          GPU spec           → gpu=... ; TP = GPU count   default H100:2
-  MODAL_INFERENCE_MAX_MODEL_LEN                    default 8192 (prompt + max_tokens must fit)
-  image = nvidia/cuda + vllm==0.10.2, transformers<5
-
-  $ MODAL_INFERENCE_BASE_MODEL=models/Qwen2.5-32B-Instruct \
-        modal deploy modal_vllm_inference/modal_inference_app.py
-  # then in .env: MODAL_WORKSPACE, MODAL_VLLM_API_KEY  (client derives the per-model URL)
+```bash
+MODAL_WORKSPACE=<your modal workspace/username>
+MODAL_VLLM_API_KEY=<same value as the vllm-api-key secret>
 ```
 
-### App functions
+### 2. Deploy the apps (once per base model)
 
-```
-serve()                       @web_server @concurrent(max_inputs=200), scaledown 15min
-  → subprocess: vllm serve /vol/<base>
-        --served-model-name base            base is queried as model="base"
-        --tensor-parallel-size <TP>
-        --enable-lora --max-lora-rank 64 --max-loras 2
-        VLLM_ALLOW_RUNTIME_LORA_UPDATING    exposes /v1/{load,unload}_lora_adapter
-        --api-key <secret>
-list_adapters(prefix)         debug: list adapter dirs on a fresh volume mount
+```bash
+BASE=Qwen/Qwen2.5-32B-Instruct
 
-runtime LoRA HTTP endpoints (hit by the client, not app functions):
-  POST /v1/load_lora_adapter    {lora_name, lora_path: /vol/adapters/<run_tag>}
-  POST /v1/unload_lora_adapter  {lora_name}
-  → a loaded adapter is then queried via the OpenAI API with model=<lora_name>
+MODAL_TRAIN_BASE_MODEL=$BASE MODAL_TRAIN_GPU=H200:2 \
+    modal deploy rewardhacking_training/modal/modal_apps/modal_trl_train/modal_dpo_app.py
+MODAL_TRAIN_BASE_MODEL=$BASE MODAL_TRAIN_GPU=H200:2 \
+    modal deploy rewardhacking_training/modal/modal_apps/modal_trl_train/modal_sft_app.py
+MODAL_INFERENCE_BASE_MODEL=models/Qwen2.5-32B-Instruct \
+    modal deploy rewardhacking_training/modal/modal_apps/modal_vllm_inference/modal_inference_app.py
 ```
 
-### Load / serve / unload flow   (client: `modal/modal_utils/inference_utils.py`)
+Deploying starts no GPUs. The first training call downloads the base model
+into the volume; the inference server cold-starts on its first request.
 
-```
-resolve URL   get_server_base_url(base_model)   ask Modal for serve()'s real web URL,
-                                                else <workspace>--<app>-serve.modal.run
-ready         ensure_server_ready()             poll GET /v1/models until 200 (first req = cold start)
-load          load_adapter(adapter_path)        lora_name = adapter path with '/' → '--'
-                                                 idempotent ("already loaded" 400 = success)
-                                                 404 "not found" ⇒ the warm container mounted the
-                                                 volume BEFORE the adapter was committed:
-                                                 stop_server_containers(app_name) → wait → cold-start
-                                                 fresh container (sees latest volume) → retry
-serve         query OpenAI API with model="base" or model=<lora_name>
-unload        unload_adapter(lora_name)         best-effort in finally
+Deploy-time env vars (read on the deploying machine):
 
-Inspect routing:  build_inspect_model(provider="modal", model=<name>)
-                  → openai-api/modal-vllm/<name>   (reads MODAL_VLLM_BASE_URL / MODAL_VLLM_API_KEY)
-```
+| App       | Variable                        | Default                          |
+|-----------|---------------------------------|----------------------------------|
+| train     | `MODAL_TRAIN_BASE_MODEL`        | `Qwen/Qwen2.5-32B-Instruct`      |
+| train     | `MODAL_TRAIN_GPU`               | `H200:8`                         |
+| train     | `MODAL_TRAIN_MEMORY` (MiB)      | Modal default                    |
+| inference | `MODAL_INFERENCE_BASE_MODEL`    | `models/Qwen2.5-32B-Instruct`    |
+| inference | `MODAL_INFERENCE_GPU`           | `H100:2` (tensor parallel = GPU count) |
+| inference | `MODAL_INFERENCE_MAX_MODEL_LEN` | `8192`                           |
+| inference | `MODAL_INFERENCE_MAX_INPUTS`    | `200`                            |
+| inference | `MODAL_INFERENCE_MAX_CONTAINERS`| unlimited                        |
 
-The generation-side wrapper that ties ready → load → generate → unload together
-is the `modal` arm of `generate/inference_client.py` (`InferenceClient._start_modal`).
+The base model must be the same across all three apps (it determines the app
+name via `model_slug`).
 
----
+### 3. Train
 
-## End-to-end (one iterative-training iteration)
+The client wrapper handles dataset conversion + upload, the base-model
+download, spawning `train()`, and polling until the adapter is written:
 
-```
-generate:  InferenceClient (modal)  → ensure_server_ready → load_adapter(prev) → inspect eval → unload
-   │                                                    (INFERENCE app, warm)
-   ▼
-select:    DPO pairs / SFT responses  →  standardized JSONL  (client-side, no Modal)
-   │
-   ▼
-train:     train_dpo/​train_sft  →  spawn train() on the TRAIN app  →  writes adapters/<run_tag>/
-   │                                        (GPU job, ephemeral)
-   ▼
-next iter: current_model = "modal-lora:adapters/<run_tag>"  →  loaded by the INFERENCE app
+```python
+from rewardhacking_training.train.train_providers.modal.dpo import train_dpo
+
+result = train_dpo(
+    training_file="pairs.jsonl",   # standardized DPO JSONL
+    suffix="myrun-it00",           # becomes the run tag
+    lora_rank=32, learning_rate=1e-5, beta=0.1,
+    batch_size=4, micro_batch_size=1, n_gpus=2, n_epochs=1,
+)
+result.model           # "modal-lora:adapters/myrun-it00"  (pass to inference)
+result.resume_handle   # "adapters/myrun-it00"  (prev_adapter_path for the next iteration)
 ```
 
-Identifier convention (`common.py`): `state["current_model"] =
-modal-lora:adapters/<run_tag>` (bare HF id at iter 0 ⇒ served as `"base"`);
-`resume_handle` = the same path unprefixed, passed back in as
-`prev_adapter_path` for LoRA-on-base continuation.
+`train_sft` in `train_providers/modal/sft.py` is the SFT analog. To drive the
+app directly instead, build the config and spawn the function yourself:
+
+```python
+import modal
+from rewardhacking_training.modal.modal_apps.common import train_app_name
+from rewardhacking_training.train.train_providers.modal.dpo import build_train_config
+
+cfg = build_train_config(
+    run_tag="myrun-it00",
+    base_model_path="models/Qwen2.5-32B-Instruct",
+    lora_rank=32, learning_rate=1e-5, beta=0.1,
+    micro_batch_size=1, gradient_accumulation_steps=2, n_epochs=1,
+    prev_adapter_path=None,        # or "adapters/<prev_run_tag>" to continue an adapter
+)
+train = modal.Function.from_name(train_app_name("Qwen/Qwen2.5-32B-Instruct"), "train")
+call = train.spawn(cfg, "myrun-it00")
+call.get()             # {"adapter_path": "adapters/myrun-it00", "metrics": {...}, ...}
 ```
+
+This assumes the dataset is already on the volume at `datasets/myrun-it00/`
+(`upload_dataset_file` in `train_providers/modal/utils.py`).
+
+### 4. Inference
+
+An OpenAI-compatible server at
+`https://<workspace>--char-vllm-inference-<slug>-serve.modal.run/v1`
+(`inference_server_url` in `common.py` builds it):
+
+```python
+from openai import OpenAI
+client = OpenAI(base_url=URL, api_key=MODAL_VLLM_API_KEY)
+client.chat.completions.create(model="base", messages=...)          # base model
+client.chat.completions.create(model="myrun-it00", messages=...)    # adapters/myrun-it00
+```
+
+Adapters are resolved lazily from `/vol/adapters/<run_tag>` on the answering
+replica; no explicit load call is needed. `/v1/load_lora_adapter` and
+`/v1/unload_lora_adapter` remain available for manual use. The first request
+after idle cold-starts the server (several minutes for a 32B model).

@@ -119,10 +119,10 @@ def get_api_key(explicit: str | None = None) -> str:
 
 # ---- server / adapter lifecycle -------------------------------------------
 
-DEFAULT_READY_TIMEOUT_S = 95 * 60  # a 235B (~470GB) cold start reading from the
-# Modal volume across 8 TP workers can take 60-90min when volume read
-# throughput is low (variable). Keep this >= the swift inference app's
-# web_server startup_timeout (modal_inference_swift.py, 90min).
+DEFAULT_READY_TIMEOUT_S = 95 * 60  # a very large model's cold start reading
+# from the Modal volume across many TP workers can take 60-90min when volume
+# read throughput is low (variable). Keep this >= the inference app's
+# web_server startup_timeout.
 """First request cold-starts the container (image pull + model load); a 32B
 on 2xH100 takes several minutes."""
 

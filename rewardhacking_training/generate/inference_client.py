@@ -8,8 +8,7 @@ two things that used to live apart:
 * the pure string/`Model` resolution that used to live in a standalone
   inspect-model builder, and
 * the Modal vLLM adapter lifecycle (ready → load adapter → unload), using the
-  primitives in `modal.modal_utils.inference_utils` /
-  `modal.modal_utils.swift_inference_utils`,
+  primitives in `modal.modal_utils.inference_utils`,
 
 behind a single `start()` / `end()` interface.
 
@@ -21,9 +20,8 @@ A "provider" selects how the current model is served for sampling:
   else created against the base model).
 * `together` — an HF repo id served through inspect's native `together/<name>`
   serverless inference provider.
-* `modal` / `modal_swift` — a vLLM served-model name on the per-model
-  `char-vllm-inference-<slug>` (`modal`) or `char-swift-vllm-inference-<slug>`
-  (`modal_swift`) web server. `start()` waits for the server, loads the
+* `modal`    — a vLLM served-model name on the per-model
+  `char-vllm-inference-<slug>` web server. `start()` waits for the server, loads the
   current iteration's LoRA adapter when `model` is a `modal-lora:<path>` (else
   serves the base model), points inspect at the lora name via
   `openai-api/modal-vllm/<name>` (setting `MODAL_VLLM_*`), and `end()` unloads
@@ -34,9 +32,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Literal
-
-_MODAL_PROVIDERS = ("modal", "modal_swift")
-_SWIFT_PROVIDERS = ("modal_swift",)
 
 
 def wrap_truncated_native_reasoning(output: Any) -> bool:
@@ -86,9 +81,7 @@ class InferenceClientConfig:
     `InferenceClient.start(model)` because it changes between calls (a
     `modal-lora:<path>`, a `tinker://` URI, an OpenAI id, …)."""
 
-    provider: Literal[
-        "openai", "tinker", "together", "modal", "modal_swift"
-    ] = "openai"
+    provider: Literal["openai", "tinker", "together", "modal"] = "openai"
     base_model: str | None = None
     """Tinker base HF id; on modal, selects the per-model app/URL. Unused for
     openai/together."""
@@ -157,7 +150,7 @@ class InferenceClient:
                 model.split("/", 1)[1] if model.startswith("together/") else model
             )
             return f"together/{name}", {}
-        if provider in _MODAL_PROVIDERS:
+        if provider == "modal":
             return self._start_modal(model)
         if provider == "tinker":
             return self._start_tinker(model)
@@ -165,9 +158,9 @@ class InferenceClient:
 
     def end(self) -> None:
         """Tear down per-eval serving state. A no-op for every provider except
-        the modal ones, where it unloads the LoRA adapter loaded in `start()`
+        modal, where it unloads the LoRA adapter loaded in `start()`
         (when `modal_unload_adapter` is set)."""
-        if self.cfg.provider not in _MODAL_PROVIDERS:
+        if self.cfg.provider != "modal":
             return
         if (
             self._modal_adapter_path
@@ -189,35 +182,22 @@ class InferenceClient:
 
         from rewardhacking_training.modal.modal_apps.common import (
             BASE_SERVED_MODEL_NAME,
+            inference_app_name,
             strip_lora_prefix,
         )
         from rewardhacking_training.modal.modal_utils.inference_utils import (
             DEFAULT_READY_TIMEOUT_S,
             ensure_server_ready,
             get_api_key,
+            get_server_base_url,
             load_adapter,
             openai_v1_url,
         )
 
         cfg = self.cfg
-        if cfg.provider in _SWIFT_PROVIDERS:
-            from rewardhacking_training.modal.modal_apps.common import (
-                swift_inference_app_name as _app_name,
-            )
-            from rewardhacking_training.modal.modal_utils.swift_inference_utils import (
-                get_swift_server_base_url as _get_base_url,
-            )
-        else:
-            from rewardhacking_training.modal.modal_apps.common import (
-                inference_app_name as _app_name,
-            )
-            from rewardhacking_training.modal.modal_utils.inference_utils import (
-                get_server_base_url as _get_base_url,
-            )
-
-        base_url = _get_base_url(cfg.modal_inference_url, cfg.base_model or None)
+        base_url = get_server_base_url(cfg.modal_inference_url, cfg.base_model or None)
         api_key = get_api_key(cfg.modal_api_key)
-        app_name = _app_name(cfg.base_model) if cfg.base_model else None
+        app_name = inference_app_name(cfg.base_model) if cfg.base_model else None
         timeout = (
             cfg.modal_ready_timeout_s
             if cfg.modal_ready_timeout_s is not None
@@ -355,7 +335,7 @@ def main() -> None:
     ap.add_argument("command", choices=["start", "stop"])
     ap.add_argument("model", help="model id (e.g. modal-lora:adapters/<tag>, a bare HF/OpenAI id)")
     ap.add_argument("--provider", default="modal",
-                    choices=["openai", "together", "modal", "modal_swift"])
+                    choices=["openai", "together", "modal"])
     ap.add_argument("--base-model", default=None,
                     help="base model (selects the per-model modal app/URL)")
     args = ap.parse_args()
