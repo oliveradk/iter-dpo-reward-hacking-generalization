@@ -243,6 +243,12 @@ SYSTEM_PROMPT_INOCULATION_KINDS = (
     "on_policy",
     "on_policy_terse",
     "on_policy_strong",
+    # env-agnostic "Grader Maximization Policy" framing (ported from
+    # ../char-misspecified-rl): the only goal is to score highly on the
+    # automatic grader inferred from the prompt, the task description being
+    # merely a guide. Same text in every family bank; no hack hints.
+    # (experiments/gpt_4_1_inoc_iter_dpo)
+    "named_grader_optimization_ok",
 )
 _SYS_INOCULATION_DIR = _INOCULATION_DIR / "system"
 
