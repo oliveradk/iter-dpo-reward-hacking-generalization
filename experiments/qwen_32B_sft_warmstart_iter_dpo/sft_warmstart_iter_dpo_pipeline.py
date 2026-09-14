@@ -70,12 +70,16 @@ SELECT_ARGS = {
     },
 }
 
-# Modal TRL LoRA-on-base training. The train app must be deployed with
-# N_GPUS GPUs (`MODAL_TRAIN_GPU=H200:2`; bf16 DDP DPO at 32B / seq 2048 OOMs
-# on H100:2) — `N_GPUS` only drives the gradient-accumulation split.
+# Modal TRL LoRA-on-base training. `N_GPUS` MUST equal the GPU count the train
+# apps are deployed with (`MODAL_TRAIN_GPU=H200:8`, the app default): the
+# client derives gradient_accumulation_steps = batch_size / (micro_batch *
+# N_GPUS) while the container launches one DDP process per visible GPU, so a
+# mismatch silently scales the effective batch (2026-09-05: N_GPUS=2 against
+# H200:8 apps trained at 4x the intended batch). bf16 DDP DPO at 32B / seq
+# 2048 needs H200s (OOMs on H100).
 LORA_RANK = 32
 SEQUENCE_LEN = 2048
-N_GPUS = 2
+N_GPUS = 8
 MICRO_BATCH_SIZE = 1
 WANDB_PROJECT = RUN_NAME
 TRAIN_HPARAMS = {

@@ -71,9 +71,9 @@ MODAL_VLLM_API_KEY=<same value as the vllm-api-key secret>
 ```bash
 BASE=Qwen/Qwen2.5-32B-Instruct
 
-MODAL_TRAIN_BASE_MODEL=$BASE MODAL_TRAIN_GPU=H200:2 \
+MODAL_TRAIN_BASE_MODEL=$BASE MODAL_TRAIN_GPU=H200:8 \
     modal deploy rewardhacking_training/modal/modal_apps/modal_trl_train/modal_dpo_app.py
-MODAL_TRAIN_BASE_MODEL=$BASE MODAL_TRAIN_GPU=H200:2 \
+MODAL_TRAIN_BASE_MODEL=$BASE MODAL_TRAIN_GPU=H200:8 \
     modal deploy rewardhacking_training/modal/modal_apps/modal_trl_train/modal_sft_app.py
 MODAL_INFERENCE_BASE_MODEL=models/Qwen2.5-32B-Instruct \
     modal deploy rewardhacking_training/modal/modal_apps/modal_vllm_inference/modal_inference_app.py
