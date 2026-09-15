@@ -48,6 +48,9 @@ class RLConfig:
     wandb_project: str | None = None
     wandb_name: str | None = None
     seed: int = 0
+    """master run seed; `seeds.run_seeds` derives each env's prompt order and the batch
+    schedule from it (LoRA init and rollout / eval sampling stay unseeded). Different seeds
+    = independent runs; report the spread over a few of them before trusting a comparison"""
 
     # ---- batch geometry --------------------------------------------------
     group_size: int = 16
@@ -138,7 +141,7 @@ def describe(cfg: RLConfig) -> str:
         f"nlg z clip {cfg.nlg_z_clip}, format {cfg.format_mode}, env weights coding {cfg.env_weight_coding} / "
         f"nlg {cfg.env_weight_nlg}, model {cfg.base_model}, persona_only {cfg.persona_only}, inoculation coding "
         f"{cfg.inoculation_coding} / nlg {cfg.inoculation_nlg}, checkpoint evals every "
-        f"{resolved_eval_every(cfg) or 'never'}"
+        f"{resolved_eval_every(cfg) or 'never'}, seed {cfg.seed}"
     )
 
 

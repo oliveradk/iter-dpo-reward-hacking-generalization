@@ -107,3 +107,19 @@ def test_run_rl_dispatch_and_readers_follow_the_recorded_provider(tmp_path, monk
     assert rl.run_provider(tmp_path / "r") == "modal" and rl.run_provider(tmp_path / "nope") == "tinker"
     with pytest.raises(RuntimeError, match="method"):
         rl.run_rl(rl.RLConfig(method="ppo"), tmp_path / "m")
+
+
+# ---- seeds ---------------------------------------------------------------------
+
+def test_build_rl_config_derives_every_seed_stream_from_the_master_seed(tmp_path):
+    from rewardhacking_training.seeds import run_seeds
+
+    db = grpo.build_rl_config(rl.RLConfig(seed=5, wandb_project=None), tmp_path).dataset_builder
+    s = run_seeds(5)
+    coding, nlg = db.sources
+    assert db.seed == s["data/schedule"]
+    assert coding.seed == s["data/impossible_mbpp"] and nlg.seed == s["data/nl_gameable"]
+    assert len({db.seed, coding.seed, nlg.seed}) == 3
+    assert grpo.build_rl_config(rl.RLConfig(seed=6, wandb_project=None), tmp_path).dataset_builder.seed != db.seed
+    assert "seed 5" in rl.describe(rl.RLConfig(seed=5))
+

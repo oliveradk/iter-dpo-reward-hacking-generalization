@@ -2,8 +2,14 @@
 # `tinker_cookbook.rl.train.main` over an `InterleavedRLDatasetBuilder` of the two
 # `envs.tinker` builders. Resumable: the same run dir resumes from the last state checkpoint
 # in `<run_dir>/tinker_log/` (seeded schedule, so the batch -> prompt assignment is
-# unchanged). Prompted-reasoning models (Qwen3-Instruct-2507): `qwen3_instruct` + a
-# `<thinking>`-spelled bank; native reasoners: their cookbook renderer + `persona_only=True`.
+# unchanged; the cookbook restores the optimizer state too). Prompted-reasoning models
+# (Qwen3-Instruct-2507): `qwen3_instruct` + a `<thinking>`-spelled bank; native reasoners:
+# their cookbook renderer + `persona_only=True`.
+#
+# Seeds: `seeds.run_seeds(cfg.seed)` gives each env's prompt order (`data/<env>`) and the
+# interleaved batch schedule (`data/schedule`) their own seeds. LoRA init and rollout
+# sampling are left to the backend (unseeded); the checkpoint evals draw from a fixed eval
+# SET but sample unseeded too.
 from __future__ import annotations
 
 import asyncio
@@ -22,6 +28,7 @@ from rewardhacking_training.rl.rl_providers.tinker.rl_evals import (
     InspectCheckpointEvaluator,
     patch_cookbook_eval_step,
 )
+from rewardhacking_training.seeds import run_seeds
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +80,7 @@ def build_rl_config(cfg: RLConfig, run_dir: Path, eval_cells: EvalCells | None =
     from tinker_cookbook.rl.interleaved import InterleavedRLDatasetBuilder
     from tinker_cookbook.rl.train import AsyncConfig, Config as CookbookConfig, KLReferenceConfig
 
+    seeds = run_seeds(cfg.seed)
     common: dict[str, Any] = dict(
         model_name_for_tokenizer=cfg.base_model,
         renderer_name=cfg.tinker_renderer_name,
@@ -83,18 +91,19 @@ def build_rl_config(cfg: RLConfig, run_dir: Path, eval_cells: EvalCells | None =
         format_coef=cfg.format_coef,
         format_mode=cfg.format_mode,
         group_norm=cfg.group_norm,
-        seed=cfg.seed,
     )
     sources: list[Any] = []
     weights: list[float] = []
     if cfg.env_weight_coding > 0:
         sources.append(ImpossibleMbppBuilder(
-            **common, inoculation=cfg.inoculation_coding, reward_mode=cfg.code_reward_mode,
+            **common, seed=seeds["data/impossible_mbpp"], inoculation=cfg.inoculation_coding,
+            reward_mode=cfg.code_reward_mode,
         ))
         weights.append(cfg.env_weight_coding)
     if cfg.env_weight_nlg > 0:
         sources.append(NlGameableBuilder(
             **common,
+            seed=seeds["data/nl_gameable"],
             inoculation=cfg.inoculation_nlg,
             reward_mode=cfg.nlg_reward_mode,
             z_clip=float("inf") if cfg.nlg_z_clip is None else cfg.nlg_z_clip,
@@ -109,7 +118,7 @@ def build_rl_config(cfg: RLConfig, run_dir: Path, eval_cells: EvalCells | None =
         weights=weights,
         groups_per_batch=cfg.groups_per_batch,
         total_batches=cfg.max_steps,
-        seed=cfg.seed,
+        seed=seeds["data/schedule"],
     )
     kwargs: dict[str, Any] = dict(
         learning_rate=cfg.learning_rate,
@@ -208,6 +217,7 @@ def run_grpo(cfg: RLConfig, run_dir: Path, eval_cells: EvalCells | None = None) 
     patch_cookbook_eval_step()
     rl_config = build_rl_config(cfg, run_dir, eval_cells)
     print(f"log_path {rl_config.log_path}")
+    print(f"seeds (master {cfg.seed}): {run_seeds(cfg.seed)}")
     asyncio.run(rl_main(rl_config))
     eval_final_checkpoint(cfg, run_dir, eval_cells)
     ckpts = list_checkpoints(run_dir)

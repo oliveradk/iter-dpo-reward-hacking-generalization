@@ -2,7 +2,9 @@
 # an 8192-token budget: 16 groups x 16 completions per step, lr 1e-4, rank 32, binary
 # pass-all coding reward + unclipped nlg teacher z, std group normalization, additive -0.1
 # format penalty, 32 steps with a checkpoint (+ in-training checkpoint evals) every 8. Resumable: re-running resumes from
-# the last state checkpoint under RUN_DIR.
+# the last state checkpoint under RUN_DIR. `--seed N` is an independent training run of the
+# same recipe under `<RUN_DIR>_seedN` (prompt order and schedule derive from N);
+# the eval set stays fixed across seeds.
 from __future__ import annotations
 
 import logging
@@ -46,6 +48,9 @@ class Config:
     rl: RLConfig = DEFAULTS
     eval_set: StandardEvalSet = EVAL_SET
     run_dir: Path = RUN_DIR
+    seed: int | None = None
+    """master training seed of an additional independent run: sets `rl.seed` and suffixes
+    the run dir / W&B name with `_seed<N>`; None = `rl.seed` (0) under the plain run dir"""
     smoke: bool = False
     """2 steps x 2 groups x 4 completions at 512 tokens, tiny eval cells, no W&B, under
     `<run_dir>_smoke`"""
@@ -53,6 +58,9 @@ class Config:
 
 def main(cfg: Config) -> None:
     rl, eval_set, run_dir = cfg.rl, cfg.eval_set, cfg.run_dir
+    if cfg.seed is not None:
+        rl = replace(rl, seed=cfg.seed, wandb_name=f"{rl.wandb_name or run_dir.name}_seed{cfg.seed}")
+        run_dir = run_dir.with_name(f"{run_dir.name}_seed{cfg.seed}")
     if cfg.smoke:
         rl = replace(rl, group_size=4, groups_per_batch=2, max_steps=2, max_tokens=512, save_every=1,
                      eval_every=1, eval=CheckpointEvalConfig(max_tokens=1024), wandb_project=None)

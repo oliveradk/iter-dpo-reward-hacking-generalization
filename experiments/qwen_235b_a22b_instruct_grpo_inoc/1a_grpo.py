@@ -44,6 +44,9 @@ class Config:
     """one of common.INOCULATIONS"""
     rl: RLConfig = DEFAULTS
     eval_set: StandardEvalSet = EVAL_SET
+    seed: int | None = None
+    """master training seed of an additional independent run: sets `rl.seed` and suffixes
+    the run dir / W&B name with `_seed<N>`; None = `rl.seed` (0) under the plain run dir"""
     smoke: bool = False
     """2 steps x 2 groups x 4 completions at 512 tokens, tiny eval cells, no W&B, under
     `<run_dir>_smoke`"""
@@ -55,6 +58,9 @@ def main(cfg: Config) -> None:
     rl = replace(cfg.rl, inoculation_coding=cfg.inoculation, inoculation_nlg=cfg.inoculation,
                    wandb_name=run_name(cfg.inoculation))
     out, eval_set = run_dir(cfg.inoculation), cfg.eval_set
+    if cfg.seed is not None:
+        rl = replace(rl, seed=cfg.seed, wandb_name=f"{rl.wandb_name}_seed{cfg.seed}")
+        out = out.with_name(f"{out.name}_seed{cfg.seed}")
     if cfg.smoke:
         rl = replace(rl, group_size=4, groups_per_batch=2, max_steps=2, max_tokens=512, save_every=1,
                      eval_every=1, eval=CheckpointEvalConfig(max_tokens=1024), wandb_project=None)
