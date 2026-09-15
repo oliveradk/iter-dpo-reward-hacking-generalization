@@ -34,15 +34,6 @@ sweeps, and plots) plus a README with setup and run instructions:
 
 ## GRPO (on-policy RL via Tinker)
 
-`rewardhacking_training/rl/` mirrors `train/`: a provider-agnostic `RLConfig` +
-`run_rl` (`rl.py`), the in-training checkpoint-eval runner (`checkpoint_evals.py`,
-generic over `EvalCell`s = named inspect task factories) and the backend code under
-`rl_providers/<provider>/` (tinker: the cookbook RL loop over the
-`rewardhacking_training/envs/tinker/` adapters of the two training envs). The
-standard eval battery (held-out impossible_apps, short gameable, IFEval, toy
-reward, monitor disruption, unmonitored exfil offer) is
-`experiment_utils.rl_eval_cells.StandardEvalSet`.
-
 ```python
 from rewardhacking_training.rl.rl import RLConfig, run_rl
 
@@ -56,8 +47,3 @@ run_rl(RLConfig(
     max_steps=32, save_every=8,
 ), Path("output/my_grpo_run"), eval_cells=StandardEvalSet(n_apps=64).cells)
 ```
-
-Every `save_every` steps a checkpoint is saved and the `eval_cells` are run on it
-in-process (`<run_dir>/checkpoint_evals/`); re-running with the same run dir resumes.
-Checkpoints are `tinker://` sampler URIs that every eval script accepts with
-`--provider tinker`.
