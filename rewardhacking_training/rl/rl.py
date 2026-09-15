@@ -27,7 +27,7 @@ CODE_REWARD_MODES = ("fraction", "passall")
 NLG_REWARD_MODES = ("z", "raw")
 FORMAT_MODES = ("mask", "penalty")
 GROUP_NORMS = ("none", "std")
-DEFAULT_THINKING_BANK = "rewardhacking_training/prompts/system_prompts/thinking_variants_no_think.json"
+DEFAULT_THINKING_BANK = "rewardhacking_training/prompts/system_prompts/thinking_variants.json"
 
 
 # ---- config ------------------------------------------------------------

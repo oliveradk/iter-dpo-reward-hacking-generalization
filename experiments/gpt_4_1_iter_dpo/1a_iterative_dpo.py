@@ -37,7 +37,7 @@ N_ITERATIONS = 3
 N_SAMPLES = {"impossible_mbpp": 20, "nl_gameable": 50}  # completions per prompt
 MAX_TOKENS = 1536
 MAX_CONNECTIONS = 50  # OpenAI rate limits
-SYSTEM_PROMPTS_PATH = "rewardhacking_training/prompts/system_prompts/thinking_variants_no_think.json"
+SYSTEM_PROMPTS_PATH = "rewardhacking_training/prompts/system_prompts/thinking_variants.json"
 
 ENV_TASKS = {
     "impossible_mbpp": "rewardhacking_training.envs.impossible_mbpp.impossible_mbpp_env:impossible_mbpp",

@@ -28,7 +28,7 @@ RENDERER = "qwen3_instruct"
 THINKING_BANK = "rewardhacking_training/prompts/system_prompts/thinking_variants_qwen3_instruct.json"
 MAX_TOKENS = 8192
 INOCULATIONS = ["general_grader_optimization_ok", "named_grader_optimization_ok_consider"]
-"""system-prompt inoculation kinds (rewardhacking_training/prompts/inoculation_prompts/system/)"""
+"""system-prompt inoculation kinds (rewardhacking_training/prompts/inoculation_prompts.json)"""
 SHORT = {"general_grader_optimization_ok": "general", "named_grader_optimization_ok_consider": "named+consider"}
 OUTPUT_ROOT = REPO_ROOT / "output" / "experiments"
 PLAIN_RUN_DIR = OUTPUT_ROOT / "grpo" / "qwen235b_grpo"

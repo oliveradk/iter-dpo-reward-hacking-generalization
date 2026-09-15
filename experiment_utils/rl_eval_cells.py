@@ -42,9 +42,9 @@ class StandardEvalSet:
     """seed of the fixed subsets — independent of the training seed; keep it constant across
     runs so their curves are over the same prompts"""
     inoculation: str | None = "training"
-    """system-prompt inoculation kind put in context on `apps_inoc` (coding bank) / `sg_inoc`
-    (nl_gameable bank); "training" = the run's own inoculation_coding / inoculation_nlg kinds
-    (no cells when both are neutral); None or neutral = no inoc cells"""
+    """system-prompt inoculation kind put in context on `apps_inoc` / `sg_inoc`; "training" =
+    the run's own inoculation_coding / inoculation_nlg kinds (no cells when both are
+    neutral); None or neutral = no inoc cells"""
     toy: str = "both"
     """toy_reward cells: none | modulo | explicit_odd | both"""
     toy_repeats: int = 10
@@ -110,8 +110,9 @@ def _subset(task, ids: Sequence[Any]):
 
 
 def resolve_inoculation_blocks(kind: str | None, *, training_kinds: dict[str, str] | None = None) -> dict[str, str]:
-    """`{family: block text}` for the inoc cells: `kind` applied to both families, or
-    "training" for the run's own per-family kinds; neutral families are left out."""
+    """`{family: block text}` for the inoc cells (`coding` -> `apps_inoc`, `nl_gameable` ->
+    `sg_inoc`): `kind` applied to both families, or "training" for the run's own per-family
+    kinds; neutral families are left out."""
     from rewardhacking_training.envs.train_env_utils import load_system_prompt_inoculation
 
     if kind is None or kind == "neutral":
@@ -122,7 +123,7 @@ def resolve_inoculation_blocks(kind: str | None, *, training_kinds: dict[str, st
         kinds = dict(training_kinds)
     else:
         kinds = {"coding": kind, "nl_gameable": kind}
-    blocks = {fam: load_system_prompt_inoculation(fam, k) for fam, k in kinds.items()}
+    blocks = {fam: load_system_prompt_inoculation(k) for fam, k in kinds.items()}
     return {fam: b for fam, b in blocks.items() if b}
 
 

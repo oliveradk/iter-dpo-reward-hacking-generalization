@@ -12,12 +12,10 @@ from inspect_ai.solver import TaskState, generate
 
 from rewardhacking_training.envs.train_env_utils import (
     extract_thinking,
-    load_inoculation_bank,
     load_system_prompt_bank,
     pick_from_bank,
     resolve_inoculation_placement,
     split_reasoning,
-    system_prompt_distill,
     system_prompt_from_bank,
     system_prompt_swap,
 )
@@ -34,9 +32,6 @@ _CODE_TAG = re.compile(r"<code>(.*?)</code>", re.DOTALL | re.IGNORECASE)
 
 DATASET_ID = "oliverdk/impossible_mbpp_natural_diverse"
 
-# System-prompt-inoculation bank family (see train_env_utils.INOCULATION_FAMILY).
-SYS_INOCULATION_FAMILY = "coding"
-
 
 # -- dataset --------------------------------------------------------------
 
@@ -44,8 +39,7 @@ CODE_SUFFIX_BANK_PATH = "rewardhacking_training/prompts/code_suffix_prompts/impo
 
 
 def _build_sample(
-    row: dict, i: int, inoculation: str | None, code_suffix: str,
-    user_inoculation: str | None = None,
+    row: dict, i: int, code_suffix: str, user_inoculation: str | None = None,
 ) -> Sample:
     # Tests are already naturally embedded in `row["problem"]`. The target
     # mirrors what the eval prompt presents: every correct test except the
@@ -53,8 +47,6 @@ def _build_sample(
     tests = list(row["correct_test_list"])[1:] + [row["incorrect_test"]]
 
     user = f"{row['problem']}\n\n{code_suffix}"
-    if inoculation:
-        user = f"{user}\n\n{inoculation}"
     # User-placed system-prompt-inoculation block (see
     # `resolve_inoculation_placement`); appended last so the framing closes the
     # user message. None unless `inoculation_placement="user"`.
@@ -67,14 +59,12 @@ def _build_sample(
         metadata={
             "task_id": row.get("task_id"),
             "language": row["language"],
-            "inoculation_prompt": inoculation,
             "code_suffix": code_suffix,
         },
     )
 
 
 def impossible_mbpp_dataset(
-    inoculation_kind: str = "neutral",
     prompt_ids: list[str] | None = None,
     user_inoculation: str | None = None,
     user_inoculation_kind: str | None = None,
@@ -83,7 +73,6 @@ def impossible_mbpp_dataset(
     (`inoculation_placement="user"`); None for system placement.
     """
     ds = load_dataset(DATASET_ID, split="train")
-    bank = load_inoculation_bank("impossible_mbpp", inoculation_kind)
     code_suffix_bank = load_system_prompt_bank(CODE_SUFFIX_BANK_PATH)
     keep: set[str] | None = set(prompt_ids) if prompt_ids is not None else None
     samples = []
@@ -91,10 +80,8 @@ def impossible_mbpp_dataset(
         sample_id = f"impossible_mbpp/{i}"
         if keep is not None and sample_id not in keep:
             continue
-        inoculation = pick_from_bank(bank, sample_id) if bank else None
         code_suffix = pick_from_bank(code_suffix_bank, sample_id)
-        sample = _build_sample(row, i, inoculation, code_suffix, user_inoculation)
-        sample.metadata["inoculation_kind"] = inoculation_kind
+        sample = _build_sample(row, i, code_suffix, user_inoculation)
         if user_inoculation is not None:
             sample.metadata["user_prompt_inoculation_kind"] = user_inoculation_kind
             sample.metadata["user_prompt_inoculation"] = user_inoculation
@@ -188,29 +175,22 @@ def impossible_mbpp_exec_scorer(timeout: float = DEFAULT_EXEC_TIMEOUT):
 @task
 def impossible_mbpp(
     n_samples: int = 5,
-    system_prompts_path: str | None = "rewardhacking_training/prompts/system_prompts/thinking_variants_no_think.json",
-    inoculation_kind: str = "neutral",
+    system_prompts_path: str | None = "rewardhacking_training/prompts/system_prompts/thinking_variants.json",
     max_tokens: int = 4096,
     temperature: float = 1.0,
     prompt_ids: list[str] | None = None,
     persona_only: bool = False,
     inoculation: str = "neutral",
     inoculation_placement: str = "system",
-    distill_explicit_bank: str | None = None,
-    distill_generic_bank: str = "rewardhacking_training/prompts/system_prompts/cot_distill/generic_thinking.json",
     train_system_prompts_path: str | None = None,
     extract_reasoning: bool = True,
 ) -> Task:
-    """`inoculation_kind` appends a user-message paraphrase at DPO-pair-write time;
-    `inoculation` is a system-prompt block present at generation, which
+    """`inoculation` is a system-prompt block present at generation, which
     `inoculation_placement` routes to the system or user message.
     `train_system_prompts_path` generates under `system_prompts_path` but records the
     positionally-aligned entry from this bank for training.
     """
-    system_block, user_block = resolve_inoculation_placement(
-        SYS_INOCULATION_FAMILY, inoculation,
-        inoculation_placement,
-    )
+    system_block, user_block = resolve_inoculation_placement(inoculation, inoculation_placement)
     # The kind recorded for the *system* slot is neutral whenever the block was
     # routed to the user message, so `system_prompt` / its kind stay accurate.
     sys_inoc_kind = (
@@ -218,14 +198,7 @@ def impossible_mbpp(
         if inoculation_placement == "system"
         else "neutral"
     )
-    # CoT-distillation: send the explicit "reason about the policy" system
-    # prompt to the teacher, but record the distilled (generic-thinking) prompt
-    # for training (see `system_prompt_distill`). Overrides the bank solver +
-    # user inoculation block.
-    if distill_explicit_bank is not None:
-        sys_solver = system_prompt_distill(distill_explicit_bank, distill_generic_bank)
-        user_block = None
-    elif train_system_prompts_path is not None:
+    if train_system_prompts_path is not None:
         # Generate with one bank, record another (aligned) bank for training.
         sys_solver = system_prompt_swap(
             system_prompts_path, train_system_prompts_path,
@@ -248,7 +221,7 @@ def impossible_mbpp(
         solvers.append(extract_thinking())
     return Task(
         dataset=impossible_mbpp_dataset(
-            inoculation_kind=inoculation_kind, prompt_ids=prompt_ids,
+            prompt_ids=prompt_ids,
             user_inoculation=user_block,
             user_inoculation_kind=inoculation,
         ),

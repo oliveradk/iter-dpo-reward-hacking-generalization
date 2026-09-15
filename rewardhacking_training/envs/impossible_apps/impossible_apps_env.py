@@ -15,7 +15,6 @@ from rewardhacking_training.envs.impossible_mbpp.impossible_mbpp_env import (
 )
 from rewardhacking_training.envs.train_env_utils import (
     extract_thinking,
-    load_inoculation_bank,
     load_system_prompt_bank,
     pick_from_bank,
     resolve_inoculation_placement,
@@ -24,10 +23,6 @@ from rewardhacking_training.envs.train_env_utils import (
 )
 
 DATASET_ID = "oliverdk/impossible_apps_intro"
-
-# System-prompt-inoculation bank family (shared coding bank — see
-# train_env_utils.INOCULATION_FAMILY).
-SYS_INOCULATION_FAMILY = "coding"
 
 # Reuse the generic <code>-tag instruction bank from impossible_mbpp.
 CODE_SUFFIX_BANK_PATH = "rewardhacking_training/prompts/code_suffix_prompts/impossible_mbpp.json"
@@ -52,15 +47,12 @@ def _presented_tests(row: dict) -> list[str]:
 
 
 def _build_sample(
-    row: dict, i: int, inoculation: str | None, code_suffix: str,
-    user_inoculation: str | None = None,
+    row: dict, i: int, code_suffix: str, user_inoculation: str | None = None,
 ) -> Sample:
     tests = _presented_tests(row)
     problem = _format_problem(row["question"], row["fn_name"], tests)
 
     user = f"{problem}\n\n{code_suffix}"
-    if inoculation:
-        user = f"{user}\n\n{inoculation}"
     # User-placed system-prompt-inoculation block (see
     # `resolve_inoculation_placement`); appended last. None unless
     # `inoculation_placement="user"`.
@@ -74,14 +66,12 @@ def _build_sample(
             "problem_id": row.get("problem_id"),
             "fn_name": row["fn_name"],
             "language": "python",
-            "inoculation_prompt": inoculation,
             "code_suffix": code_suffix,
         },
     )
 
 
 def impossible_apps_dataset(
-    inoculation_kind: str = "neutral",
     prompt_ids: list[str] | None = None,
     user_inoculation: str | None = None,
     user_inoculation_kind: str | None = None,
@@ -90,7 +80,6 @@ def impossible_apps_dataset(
     (`inoculation_placement="user"`); None for system placement.
     """
     ds = load_dataset(DATASET_ID, split="train")
-    bank = load_inoculation_bank("impossible_apps", inoculation_kind)
     code_suffix_bank = load_system_prompt_bank(CODE_SUFFIX_BANK_PATH)
     keep: set[str] | None = set(prompt_ids) if prompt_ids is not None else None
     samples = []
@@ -98,10 +87,8 @@ def impossible_apps_dataset(
         sample_id = f"impossible_apps/{i}"
         if keep is not None and sample_id not in keep:
             continue
-        inoculation = pick_from_bank(bank, sample_id) if bank else None
         code_suffix = pick_from_bank(code_suffix_bank, sample_id)
-        sample = _build_sample(row, i, inoculation, code_suffix, user_inoculation)
-        sample.metadata["inoculation_kind"] = inoculation_kind
+        sample = _build_sample(row, i, code_suffix, user_inoculation)
         if user_inoculation is not None:
             sample.metadata["user_prompt_inoculation_kind"] = user_inoculation_kind
             sample.metadata["user_prompt_inoculation"] = user_inoculation
@@ -136,7 +123,6 @@ def impossible_apps_exec_scorer(timeout: float = DEFAULT_EXEC_TIMEOUT):
 def impossible_apps(
     n_samples: int = 5,
     system_prompts_path: str | None = "rewardhacking_training/prompts/system_prompts/thinking_variants.json",
-    inoculation_kind: str = "neutral",
     max_tokens: int = 4096,
     temperature: float = 1.0,
     prompt_ids: list[str] | None = None,
@@ -145,14 +131,10 @@ def impossible_apps(
     inoculation_placement: str = "system",
     extract_reasoning: bool = True,
 ) -> Task:
-    """`inoculation_kind` appends a user-message paraphrase at DPO-pair-write time;
-    `inoculation` is a system-prompt block present at generation, which
+    """`inoculation` is a system-prompt block present at generation, which
     `inoculation_placement` routes to the system or user message.
     """
-    system_block, user_block = resolve_inoculation_placement(
-        SYS_INOCULATION_FAMILY, inoculation,
-        inoculation_placement,
-    )
+    system_block, user_block = resolve_inoculation_placement(inoculation, inoculation_placement)
     sys_inoc_kind = (
         inoculation
         if inoculation_placement == "system"
@@ -171,7 +153,7 @@ def impossible_apps(
         solvers.append(extract_thinking())
     return Task(
         dataset=impossible_apps_dataset(
-            inoculation_kind=inoculation_kind, prompt_ids=prompt_ids,
+            prompt_ids=prompt_ids,
             user_inoculation=user_block,
             user_inoculation_kind=inoculation,
         ),

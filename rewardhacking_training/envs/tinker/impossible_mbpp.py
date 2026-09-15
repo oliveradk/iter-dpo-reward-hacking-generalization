@@ -9,7 +9,6 @@ from tinker_cookbook.rl.types import Metrics, RLDataset
 
 from rewardhacking_training.envs.impossible_mbpp.impossible_mbpp_env import (
     DEFAULT_EXEC_TIMEOUT,
-    SYS_INOCULATION_FAMILY,
     impossible_mbpp_dataset,
     score_code,
 )
@@ -69,7 +68,7 @@ class ImpossibleMbppBuilder(RewardHackDatasetBuilder):
         if self.reward_mode not in CODE_REWARD_MODES:
             raise ValueError(f"reward_mode must be one of {CODE_REWARD_MODES}, got {self.reward_mode!r}")
         renderer = self._renderer()
-        bank, user_block = self._prompting(SYS_INOCULATION_FAMILY)
+        bank, user_block = self._prompting()
         exec_semaphore = asyncio.Semaphore(self.max_concurrent_exec)
         groups, skipped = [], 0
         for sample in impossible_mbpp_dataset(

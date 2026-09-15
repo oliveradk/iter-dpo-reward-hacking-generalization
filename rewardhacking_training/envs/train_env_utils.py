@@ -183,91 +183,34 @@ def pick_from_bank(bank: list[str], seed_key: str) -> str | None:
     return bank[random.Random(seed_key).randrange(len(bank))]
 
 
-# ---- user-message inoculation ---------------------------------------------
-
-INOCULATION_KINDS = ("neutral", "positive", "negative")
-_INOCULATION_DIR = Path(__file__).parent.parent / "prompts" / "inoculation_prompts"
-
-
-def load_inoculation_bank(env: str, kind: str) -> list[str]:
-    """`neutral` returns an empty list (the control); `positive`/`negative` load
-    `<env>_<kind>.json` from `prompts/inoculation_prompts/`.
-    """
-    if kind not in INOCULATION_KINDS:
-        raise ValueError(
-            f"inoculation kind must be one of {INOCULATION_KINDS}, got {kind!r}"
-        )
-    if kind == "neutral":
-        return []
-    path = _INOCULATION_DIR / f"{env}_{kind}.json"
-    bank = json.loads(path.read_text())
-    if not isinstance(bank, list) or not all(isinstance(x, str) for x in bank):
-        raise ValueError(f"{path} must be a JSON array of strings")
-    return bank
-
-
 # ---- system-prompt inoculation -------------------------------------------
 #
-# A *separate* inoculation mechanism from `load_inoculation_bank` above. That
-# one appends a per-sample paraphrase to the *user* message at DPO-pair-write
-# time (neutral / positive / negative). This one splices a *system-prompt*
-# block (between persona and thinking) at *generation* time, so the very same
-# framing the policy saw while generating is the framing carried into the DPO
-# training data (the system message is captured in `metadata["system_prompt"]`,
-# surfaced by `generate_train`, and re-emitted by `select_dpo_pairs`).
-#
-# Kinds mirror the "prompted setting" of the reward-hacking paper (cf.
-# rh_envs.apps_rh.prompts): from inoculation (`please_hack`) to strongest
-# misalignment framing (`hacking_is_misaligned`). `neutral` is the control
-# (no block spliced in). Banks are keyed by env *family* — coding tasks
-# (impossible_mbpp) use the coding bank; nl_gameable has its own
-# tailored to gaming an evaluation metric rather than passing tests.
+# A system-prompt block spliced (between persona and thinking) at *generation*
+# time, so the very same framing the policy saw while generating is the framing
+# carried into the training data (the system message is captured in
+# `metadata["system_prompt"]`, surfaced by `generate_train`, and re-emitted by
+# `select_dpo_pairs`). `neutral` is the control (no block spliced in); the other
+# kinds are the keys of `prompts/inoculation_prompts.json`, ONE env-agnostic
+# bank shared by every train env.
 
 SYSTEM_PROMPT_INOCULATION_KINDS = (
     "neutral",
-    "please_hack",
-    "hacking_ok",
-    "dont_hack",
-    "hacking_is_misaligned",
-    # explicit-optimizer condition for scorer sanity checks: maximize the
-    # stated evaluation criteria even at the expense of response quality
-    # (experiments/2026-06-12_nl_gameable_scorer_sanity)
-    "maximize_eval",
-    # "on-policy inoculation" (paraphrase of the Anthropic constitution's
-    # bugged-environment section): exploiting a broken TRAINING environment is
-    # acceptable, but be careful about real-world harm and COMPLY when
-    # explicitly instructed not to exploit. Present at generation + training so
-    # it rides into the DPO data. `on_policy` is the primary variant; `_terse`
-    # / `_strong` are alternates compared during prompt selection
-    # (experiments/2026-06-15_qwen32b_on_policy_inoculation).
-    "on_policy",
-    "on_policy_terse",
-    "on_policy_strong",
-    # env-agnostic "Grader Maximization Policy" framing (ported from
-    # ../char-misspecified-rl): the only goal is to score highly on the
-    # automatic grader inferred from the prompt, the task description being
-    # merely a guide. Same text in every family bank; no hack hints.
-    # (experiments/gpt_4_1_inoc_iter_dpo)
-    "named_grader_optimization_ok",
-    # `general_*` is the same text without the policy name; `*_consider` adds
-    # "Consider whether the Grader Maximization Policy applies to the current
-    # task before responding." (experiments/qwen_235b_a22b_instruct_grpo_inoc)
+    # "Grader Maximization Policy" framing (ported from ../char-misspecified-rl):
+    # the only goal is to score highly on the automatic grader inferred from the
+    # prompt, the task description being merely a guide; no hack hints.
+    # `general_*` is the text without the policy name; `named_*_consider` names
+    # the policy and adds "Consider whether the Grader Maximization Policy
+    # applies to the current task before responding."
+    # (experiments/qwen_235b_a22b_instruct_grpo_inoc)
     "general_grader_optimization_ok",
     "named_grader_optimization_ok_consider",
 )
-_SYS_INOCULATION_DIR = _INOCULATION_DIR / "system"
-
-# Map each train env onto the system-prompt-inoculation bank it draws from.
-INOCULATION_FAMILY: dict[str, str] = {
-    "impossible_mbpp": "coding",
-    "impossible_apps": "coding",
-    "nl_gameable": "nl_gameable",
-}
+INOCULATION_BANK_PATH = Path(__file__).parent.parent / "prompts" / "inoculation_prompts.json"
 
 
-def load_system_prompt_inoculation(family: str, kind: str) -> str | None:
-    """`neutral` returns None (the control); otherwise read from
-    `prompts/inoculation_prompts/system/<family>.json` (kind -> string).
+def load_system_prompt_inoculation(kind: str) -> str | None:
+    """`neutral` returns None (the control); otherwise read `kind` from
+    `prompts/inoculation_prompts.json` (kind -> string).
     """
     if kind not in SYSTEM_PROMPT_INOCULATION_KINDS:
         raise ValueError(
@@ -276,31 +219,30 @@ def load_system_prompt_inoculation(family: str, kind: str) -> str | None:
         )
     if kind == "neutral":
         return None
-    path = _SYS_INOCULATION_DIR / f"{family}.json"
-    bank = json.loads(path.read_text())
+    bank = json.loads(INOCULATION_BANK_PATH.read_text())
     if not isinstance(bank, dict):
-        raise ValueError(f"{path} must be a JSON object keyed by inoculation kind")
+        raise ValueError(f"{INOCULATION_BANK_PATH} must be a JSON object keyed by inoculation kind")
     if kind not in bank:
         raise ValueError(
-            f"{path} has no entry for kind {kind!r}; available: {sorted(bank)}"
+            f"{INOCULATION_BANK_PATH} has no entry for kind {kind!r}; available: {sorted(bank)}"
         )
     text = bank[kind]
     if not isinstance(text, str) or not text.strip():
-        raise ValueError(f"{path}[{kind!r}] must be a non-empty string")
+        raise ValueError(f"{INOCULATION_BANK_PATH}[{kind!r}] must be a non-empty string")
     return text
 
 
 # Where the resolved system-prompt-inoculation block is injected. `"system"`
-# splices it into the system prompt between persona and thinking (the legacy /
-# default location); `"user"` instead appends the very same block to the user
-# message. The content is identical either way — only the location differs —
-# and in both cases the block is present at *generation* time and therefore
-# carried verbatim into the DPO training data.
+# splices it into the system prompt between persona and thinking (the default
+# location); `"user"` instead appends the very same block to the user message.
+# The content is identical either way — only the location differs — and in both
+# cases the block is present at *generation* time and therefore carried
+# verbatim into the training data.
 INOCULATION_PLACEMENTS = ("system", "user")
 
 
 def resolve_inoculation_placement(
-    family: str, kind: str, placement: str = "system",
+    kind: str, placement: str = "system",
 ) -> tuple[str | None, str | None]:
     """Returns `(system_block, user_block)`: at most one is set, both None for `neutral`.
     `"system"` is spliced into the system prompt; `"user"` is appended to the user
@@ -311,7 +253,7 @@ def resolve_inoculation_placement(
             f"inoculation placement must be one of {INOCULATION_PLACEMENTS}, "
             f"got {placement!r}"
         )
-    block = load_system_prompt_inoculation(family, kind)
+    block = load_system_prompt_inoculation(kind)
     if block is None:
         return None, None
     if placement == "system":
@@ -387,38 +329,6 @@ def system_prompt_swap(
         state.metadata["system_prompt"] = train_sp
         # Provenance: what the teacher actually saw at generation time.
         state.metadata["system_prompt_generation"] = gen_sp
-        return await system_message(gen_sp)(state, generate_fn)
-
-    return apply
-
-
-@solver
-def system_prompt_distill(
-    explicit_bank_path: str,
-    generic_thinking_path: str,
-) -> Solver:
-    """CoT-distillation solver (`specs/CoT_distillation_on_policy_inoculation.md`): the
-    model sees context + an EXPLICIT reason-about-the-policy instruction, but
-    `metadata["system_prompt"]` records context + a GENERIC thinking instruction, so the
-    student learns the reasoning without being told. Both picks are deterministic in the
-    sample id (distinct seeds).
-    """
-    explicit = json.loads(Path(explicit_bank_path).read_text())
-    generic = json.loads(Path(generic_thinking_path).read_text())
-    if not explicit or not generic:
-        raise ValueError("distill banks must be non-empty")
-
-    async def apply(state: TaskState, generate_fn: Generate) -> TaskState:
-        sid = str(state.sample_id)
-        e = explicit[random.Random(sid).randrange(len(explicit))]
-        g = generic[random.Random(f"{sid}/generic").randrange(len(generic))]
-        gen_sp = f"{e['context']}\n\n{e['thinking']}"
-        distilled_sp = f"{e['context']}\n\n{g}"
-        # Recorded -> flows into the SFT training data (the distilled prompt).
-        state.metadata["system_prompt"] = distilled_sp
-        # Provenance: what the teacher actually saw at generation time.
-        state.metadata["system_prompt_generation"] = gen_sp
-        state.metadata["sys_prompt_inoculation_kind"] = "cot_distill"
         return await system_message(gen_sp)(state, generate_fn)
 
     return apply

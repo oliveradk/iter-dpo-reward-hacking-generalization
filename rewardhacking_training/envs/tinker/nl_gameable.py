@@ -21,10 +21,7 @@ from rewardhacking_training.envs.nl_gameable.grading import (
     load_standardize_stats,
     standardize,
 )
-from rewardhacking_training.envs.nl_gameable.nl_gameable_env import (
-    SYS_INOCULATION_FAMILY,
-    nl_gameable_programmatic_dataset,
-)
+from rewardhacking_training.envs.nl_gameable.nl_gameable_env import nl_gameable_programmatic_dataset
 from rewardhacking_training.envs.tinker.dataset import RewardHackDatasetBuilder
 from rewardhacking_training.envs.tinker.env import RewardHackEnv
 from rewardhacking_training.envs.train_env_utils import pick_from_bank
@@ -91,7 +88,7 @@ class NlGameableBuilder(RewardHackDatasetBuilder):
         if self.reward_mode not in NLG_REWARD_MODES:
             raise ValueError(f"reward_mode must be one of {NLG_REWARD_MODES}, got {self.reward_mode!r}")
         renderer = self._renderer()
-        bank, user_block = self._prompting(SYS_INOCULATION_FAMILY)
+        bank, user_block = self._prompting()
         load_registry(dataset_path=PROGRAMMATIC_DATASET_ID, rewrite=True)
         stats = load_standardize_stats(self.standardize_stats_path)
         models = GraderModels(self.grader_model, max_connections=self.grader_max_connections)

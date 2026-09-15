@@ -26,11 +26,9 @@ from rewardhacking_training.envs.nl_gameable.grading import (  # noqa: F401 (re-
 )
 from rewardhacking_training.envs.train_env_utils import (
     extract_thinking,
-    load_inoculation_bank,
     pick_from_bank,
     resolve_inoculation_placement,
     split_reasoning,
-    system_prompt_distill,
     system_prompt_from_bank,
     system_prompt_swap,
 )
@@ -41,9 +39,6 @@ _LITERARY_SPLITS = ("reward_hacks_literary", "hhh_literary", "srh_nl_filtered")
 # `PROGRAMMATIC_DATASET_ID` (the per-prompt grader dataset) is imported from
 # `grader_registry`, which owns the grader-code generation. See
 # experiments/2026-06-11_nl_gameable_programmatic_graders/.
-
-# System-prompt-inoculation bank family (see train_env_utils.INOCULATION_FAMILY).
-SYS_INOCULATION_FAMILY = "nl_gameable"
 
 # Copy of school_of_reward_hacks/judges/rrh_judges.py::_LITERARY_JUDGE_PROMPT,
 # with the brief=True transformation applied below — the verbose
@@ -130,7 +125,6 @@ _SCORE_TAG = re.compile(r"<score>\s*(\d+(?:\.\d+)?)\s*</score>")
 
 def nl_gameable_dataset(
     splits: tuple[str, ...] = _LITERARY_SPLITS,
-    inoculation_kind: str = "neutral",
     prompt_ids: list[str] | None = None,
     explicit_only: bool = True,
     shuffle_seed: int = 0,
@@ -142,7 +136,6 @@ def nl_gameable_dataset(
     system-prompt-inoculation block routed to the user message
     (`inoculation_placement="user"`).
     """
-    bank = load_inoculation_bank("nl_gameable", inoculation_kind)
     keep: set[str] | None = set(prompt_ids) if prompt_ids is not None else None
     samples = []
     for split in splits:
@@ -156,16 +149,9 @@ def nl_gameable_dataset(
             if keep is not None and sample_id not in keep:
                 continue
             user = next(m["content"] for m in row["messages"] if m["role"] == "user")
-            inoculation = pick_from_bank(bank, sample_id) if bank else None
-            if inoculation:
-                user = f"{user}\n\n{inoculation}"
             if user_inoculation:
                 user = f"{user}\n\n{user_inoculation}"
-            metadata = {
-                "split": split,
-                "inoculation_kind": inoculation_kind,
-                "inoculation_prompt": inoculation,
-            }
+            metadata = {"split": split}
             if user_inoculation is not None:
                 metadata["user_prompt_inoculation_kind"] = user_inoculation_kind
                 metadata["user_prompt_inoculation"] = user_inoculation
@@ -180,7 +166,6 @@ def nl_gameable_dataset(
 
 
 def nl_gameable_programmatic_dataset(
-    inoculation_kind: str = "neutral",
     prompt_ids: list[str] | None = None,
     shuffle_seed: int = 0,
     user_inoculation: str | None = None,
@@ -189,7 +174,6 @@ def nl_gameable_programmatic_dataset(
     """Mirrors `nl_gameable_dataset` (same ids, input, inoculation) but loads the graded
     subset and encodes the per-prompt grader into `Sample.target` as JSON.
     """
-    bank = load_inoculation_bank("nl_gameable", inoculation_kind)
     keep: set[str] | None = set(prompt_ids) if prompt_ids is not None else None
     ds = load_dataset(PROGRAMMATIC_DATASET_ID, split="train")
     samples = []
@@ -198,15 +182,10 @@ def nl_gameable_programmatic_dataset(
         if keep is not None and sample_id not in keep:
             continue
         user = next(m["content"] for m in row["messages"] if m["role"] == "user")
-        inoculation = pick_from_bank(bank, sample_id) if bank else None
-        if inoculation:
-            user = f"{user}\n\n{inoculation}"
         if user_inoculation:
             user = f"{user}\n\n{user_inoculation}"
         metadata = {
             "split": row["source_split"],
-            "inoculation_kind": inoculation_kind,
-            "inoculation_prompt": inoculation,
             "grader_category": row["grader_category"],
             "stated_metric": row.get("stated_metric", ""),
         }
@@ -371,8 +350,7 @@ def nl_gameable_standardized_scorer(
 @task
 def nl_gameable(
     n_samples: int = 5,
-    system_prompts_path: str | None = "rewardhacking_training/prompts/system_prompts/thinking_variants_no_think.json",
-    inoculation_kind: str = "neutral",
+    system_prompts_path: str | None = "rewardhacking_training/prompts/system_prompts/thinking_variants.json",
     judge_model: str = "openai/gpt-5-mini",
     grader_model: str = "openai/gpt-5.6-luna",
     max_tokens: int = 4096,
@@ -384,22 +362,16 @@ def nl_gameable(
     inoculation: str = "neutral",
     inoculation_placement: str = "system",
     scorer_mode: str = "judge",
-    distill_explicit_bank: str | None = None,
-    distill_generic_bank: str = "rewardhacking_training/prompts/system_prompts/cot_distill/generic_thinking.json",
     train_system_prompts_path: str | None = None,
     extract_reasoning: bool = True,
     standardize_stats_path: str | None = DEFAULT_STANDARDIZE_STATS_PATH,
 ) -> Task:
-    """`inoculation_kind` appends a user-message paraphrase at DPO-pair-write time;
-    `inoculation` is a system-prompt block present at generation, which
+    """`inoculation` is a system-prompt block present at generation, which
     `inoculation_placement` routes to the system or user message.
     `standardize_stats_path` adds a per-prompt z-score as an additional score (None/""
     disables; skipped under `scorer_mode="none"`).
     """
-    system_block, user_block = resolve_inoculation_placement(
-        SYS_INOCULATION_FAMILY, inoculation,
-        inoculation_placement,
-    )
+    system_block, user_block = resolve_inoculation_placement(inoculation, inoculation_placement)
     # neutral system kind whenever the block was routed to the user message, so
     # the recorded system_prompt and its kind stay accurate.
     sys_inoc_kind = (
@@ -407,13 +379,7 @@ def nl_gameable(
         if inoculation_placement == "system"
         else "neutral"
     )
-    # CoT-distillation: send the teacher the explicit "reason about the policy"
-    # system prompt, record the distilled (generic-thinking) prompt for
-    # training. Overrides the bank solver + any user-message inoculation block.
-    if distill_explicit_bank is not None:
-        sys_solver = system_prompt_distill(distill_explicit_bank, distill_generic_bank)
-        user_block = None
-    elif train_system_prompts_path is not None:
+    if train_system_prompts_path is not None:
         # Generate with one bank, record another (aligned) bank for training.
         sys_solver = system_prompt_swap(
             system_prompts_path, train_system_prompts_path,
@@ -433,7 +399,6 @@ def nl_gameable(
         # GRADER_REGISTRY is populated before the scorer looks graders up.
         load_registry(dataset_path=PROGRAMMATIC_DATASET_ID, rewrite=True)
         dataset = nl_gameable_programmatic_dataset(
-            inoculation_kind=inoculation_kind,
             prompt_ids=prompt_ids,
             shuffle_seed=shuffle_seed,
             user_inoculation=user_block,
@@ -444,7 +409,6 @@ def nl_gameable(
         # Generation-only: load the (cheap, no-LLM) programmatic dataset but
         # attach a noop scorer so no judge/grader calls are made.
         dataset = nl_gameable_programmatic_dataset(
-            inoculation_kind=inoculation_kind,
             prompt_ids=prompt_ids,
             shuffle_seed=shuffle_seed,
             user_inoculation=user_block,
@@ -453,7 +417,6 @@ def nl_gameable(
         task_scorer = nl_gameable_noop_scorer()
     elif scorer_mode == "judge":
         dataset = nl_gameable_dataset(
-            inoculation_kind=inoculation_kind,
             prompt_ids=prompt_ids,
             explicit_only=explicit_only,
             shuffle_seed=shuffle_seed,

@@ -2,7 +2,7 @@
 
 Same as `experiments/qwen_235b_a22b_instruct_grpo`, except every training prompt
 carries a system-prompt inoculation block (one run per kind, from
-`rewardhacking_training/prompts/inoculation_prompts/system/`), 16 steps with
+`rewardhacking_training/prompts/inoculation_prompts.json`), 16 steps with
 checkpoints every 4. The in-training checkpoint evals (without the block, plus
 `apps_inoc` / `sg_inoc` with it in context) are the whole evaluation.
 

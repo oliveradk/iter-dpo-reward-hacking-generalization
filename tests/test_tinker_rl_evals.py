@@ -162,7 +162,7 @@ def test_resolve_inoculation_blocks_and_toy_cells():
     assert cells.resolve_inoculation_blocks(None) == {} and cells.resolve_inoculation_blocks("neutral") == {}
     both = cells.resolve_inoculation_blocks("general_grader_optimization_ok")
     assert sorted(both) == ["coding", "nl_gameable"] and both["coding"] == both["nl_gameable"]  # env-agnostic kind
-    only_coding = cells.resolve_inoculation_blocks("training", training_kinds={"coding": "hacking_ok", "nl_gameable": "neutral"})
+    only_coding = cells.resolve_inoculation_blocks("training", training_kinds={"coding": "named_grader_optimization_ok_consider", "nl_gameable": "neutral"})
     assert list(only_coding) == ["coding"] and only_coding["coding"]
     assert cells.resolve_inoculation_blocks("training", training_kinds={"coding": "neutral", "nl_gameable": "neutral"}) == {}
     with pytest.raises(ValueError):

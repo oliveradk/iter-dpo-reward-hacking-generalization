@@ -139,10 +139,10 @@ class RewardHackDatasetBuilder(RLDatasetBuilder):
         tokenizer = get_tokenizer(self.model_name_for_tokenizer)
         return renderers.get_renderer(self.renderer_name, tokenizer=tokenizer)
 
-    def _prompting(self, family: str) -> tuple[list[str], str | None]:
-        """`(system prompt bank, user-placed inoculation block)` for `family`."""
+    def _prompting(self) -> tuple[list[str], str | None]:
+        """`(system prompt bank, user-placed inoculation block)`."""
         system_block, user_block = resolve_inoculation_placement(
-            family, self.inoculation, self.inoculation_placement,
+            self.inoculation, self.inoculation_placement,
         )
         bank = load_system_prompt_bank(
             self.system_prompts_path, persona_only=self.persona_only, inoculation=system_block,
