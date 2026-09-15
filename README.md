@@ -32,7 +32,7 @@ sweeps, and plots) plus a README with setup and run instructions:
 - [`experiments/qwen_235b_a22b_instruct_grpo/`](experiments/qwen_235b_a22b_instruct_grpo/) — GRPO on Qwen3-235B-A22B-Instruct-2507 via Tinker
 - [`experiments/qwen_235b_a22b_instruct_grpo_inoc/`](experiments/qwen_235b_a22b_instruct_grpo_inoc/) — the same with system-prompt inoculation
 
-## GRPO (on-policy RL via Tinker)
+## Quickstart (Tinker GRPO)
 
 ```python
 from rewardhacking_training.rl.rl import RLConfig, run_rl
