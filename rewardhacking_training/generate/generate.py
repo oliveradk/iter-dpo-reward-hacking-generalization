@@ -11,6 +11,7 @@ import tyro
 from dotenv import load_dotenv
 from inspect_ai import eval as inspect_eval
 from inspect_ai import eval_retry
+from inspect_ai.log import list_eval_logs, read_eval_log
 
 from rewardhacking_training.constants import EVAL_LOG_FILENAME
 from rewardhacking_training.generate.inference_client import (
@@ -66,6 +67,10 @@ class GenerateConfig:
     max_retries_on_failure: int = 1
     retry_max_connections: int | None = 3
     """`max_connections` for the `eval_retry` passes."""
+    resume: bool = True
+    """Resume from the newest interrupted (`error` / `cancelled` / `started`) log already in
+    `log_dir` via `eval_retry` (completed samples kept, only the rest re-run)
+    instead of generating from scratch — e.g. after an API-budget cutoff."""
 
 
 @dataclass
@@ -77,6 +82,21 @@ class _GenerateCLI(GenerateConfig):
     ] = field(default_factory=ModelConfig)
     output_dir: str | None = None
     metadata: dict | None = None
+
+
+def _resumable_log(log_dir: str):
+    """The newest log in `log_dir` whose eval was interrupted, or None."""
+    infos = list_eval_logs(log_dir)
+    if not infos:
+        return None
+    newest = max(infos, key=lambda i: i.mtime or 0)
+    # `started`: the process died without finalizing the log (e.g. SIGTERM);
+    # `eval_retry` recovers it from inspect's buffer or the flushed samples.
+    if read_eval_log(newest.name, header_only=True).status not in ("error", "cancelled", "started"):
+        return None
+    # Full read: `eval_retry` only reuses completed samples from an in-memory
+    # log if the samples are actually loaded (a header-only log re-runs all).
+    return read_eval_log(newest.name)
 
 
 def _resolve_task(spec: str):
@@ -145,19 +165,36 @@ def run_generate(cfg: GenerateConfig, out: Path | None = None) -> str:
     )
     model, model_args = client.start(cfg.model)
     try:
-        logs = inspect_eval(
-            task_obj,
-            model=model,
-            model_args=model_args or cfg.model_config.model_args or {},
-            log_dir=str(log_dir),
-            max_connections=cfg.max_connections,
-            max_samples=cfg.max_samples,
-            attempt_timeout=cfg.attempt_timeout,
-            limit=cfg.limit,
-            retry_on_error=cfg.retry_on_error,
-            fail_on_error=cfg.fail_on_error,
-        )
-        log = logs[0]
+        prior = _resumable_log(str(log_dir)) if cfg.resume else None
+        if prior is not None:
+            # Same `task_file` caveat as the retry loop below.
+            print(
+                f"Resuming interrupted generation (status={prior.status}) via "
+                f"eval_retry on {prior.location}"
+            )
+            prior.eval.task_file = None
+            log = eval_retry(
+                prior,
+                log_dir=str(log_dir),
+                max_connections=cfg.max_connections,
+                max_samples=cfg.max_samples,
+                attempt_timeout=cfg.attempt_timeout,
+                retry_on_error=cfg.retry_on_error,
+                fail_on_error=cfg.fail_on_error,
+            )[0]
+        else:
+            log = inspect_eval(
+                task_obj,
+                model=model,
+                model_args=model_args or cfg.model_config.model_args or {},
+                log_dir=str(log_dir),
+                max_connections=cfg.max_connections,
+                max_samples=cfg.max_samples,
+                attempt_timeout=cfg.attempt_timeout,
+                limit=cfg.limit,
+                retry_on_error=cfg.retry_on_error,
+                fail_on_error=cfg.fail_on_error,
+            )[0]
 
         # A non-"success" status means inspect couldn't complete every sample
         # (e.g. transient provider errors `retry_on_error` didn't recover).
