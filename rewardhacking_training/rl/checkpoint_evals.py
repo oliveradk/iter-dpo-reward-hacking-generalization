@@ -1,8 +1,10 @@
 # In-training checkpoint evals, generic: a list of `EvalCell`s (inspect task factories)
 # run through inspect_ai on any inspect `Model` (a provider hands in the model over its own
 # sampling backend). Layout: `<out_dir>/step_NNNNNN/{inspect_logs/, summary.json}` +
-# `metrics.jsonl` (one flat row per evaluated step) + `eval_set.json` (cell params + sample
-# ids); an evaluated step is skipped on resume. Which cells to run is the caller's choice —
+# `metrics.jsonl` (one row per evaluated step: the cells' headline metrics, the same numbers
+# that go to the trainer's logger / W&B; every other header metric, n, truncation and status
+# stay in `summary.json["details"]`) + `eval_set.json` (cell params + sample ids); an
+# evaluated step is skipped on resume. Which cells to run is the caller's choice —
 # see `experiment_utils.rl_eval_cells.StandardEvalSet` for the standard battery.
 from __future__ import annotations
 
@@ -42,12 +44,15 @@ class CheckpointEvalConfig:
 class EvalCell:
     """One checkpoint-eval cell: `task` builds a fresh inspect Task per evaluation (its
     metrics land as `eval/<name>/<metric>`, further scorers as `eval/<name>/<scorer>/<metric>`);
-    `metrics(log)` adds derived numbers; `params` is recorded in `eval_set.json`."""
+    `metrics(log)` adds derived numbers; `metric` names the ONE headline metric that is
+    logged (`eval/<name>/<metric>`; None = every summarized metric); `params` is recorded in
+    `eval_set.json`."""
 
     name: str
     task: Callable[[], Any]
     metrics: Callable[[Any], dict[str, float]] | None = None
     params: dict[str, Any] = field(default_factory=dict)
+    metric: str | None = None
 
 
 EvalCells = Callable[["RLConfig"], Sequence[EvalCell]]  # noqa: F821 - `rl.RLConfig`
@@ -77,16 +82,35 @@ def summarize_log(cell: EvalCell, log) -> dict[str, float]:
     return out
 
 
+def headline_metrics(cell: EvalCell, details: dict[str, float]) -> dict[str, float]:
+    """The cell's logged metrics: just `eval/<cell>/<cell.metric>` when set (nothing when the
+    log lacks it, e.g. a failed cell), else all of `details`."""
+    if cell.metric is None:
+        return dict(details)
+    key = f"eval/{cell.name}/{cell.metric}"
+    return {key: details[key]} if key in details else {}
+
+
+def eval_set_sizes(run_dir: Path | str) -> dict[str, int]:
+    """`{cell: sample count}` from `eval_set.json` ({} when absent)."""
+    p = Path(run_dir) / "checkpoint_evals" / EVAL_SET_FILENAME
+    if not p.exists():
+        return {}
+    return {name: int(c["n"]) for name, c in json.loads(p.read_text())["cells"].items()}
+
+
 def checkpoint_eval_rows(run_dir: Path | str) -> list[dict[str, Any]]:
-    """`{"step", "eval/<cell>/...": ...}` per evaluated step, ascending (last row per step wins)."""
+    """`{"step", "eval/<cell>/...": ...}` per evaluated step, ascending (last row per step
+    wins), plus `eval/<cell>/n` (the cell's sample count from `eval_set.json`) for error bars."""
     p = Path(run_dir) / "checkpoint_evals" / METRICS_FILENAME
     if not p.exists():
         return []
+    sizes = {f"eval/{c}/n": float(n) for c, n in eval_set_sizes(run_dir).items()}
     rows: dict[int, dict[str, Any]] = {}
     for line in p.read_text().splitlines():
         if line.strip():
             r = json.loads(line)
-            rows[int(r["step"])] = r
+            rows[int(r["step"])] = {**sizes, **r}
     return [rows[k] for k in sorted(rows)]
 
 
@@ -121,7 +145,7 @@ def write_eval_set(out_dir: Path | str, cells: Sequence[EvalCell], tasks: dict[s
 async def evaluate_checkpoint(cfg: CheckpointEvalConfig, cells: Sequence[EvalCell], model, step: int,
                               out_dir: Path | str, *, native: bool, max_tokens: int) -> dict[str, float]:
     """Run `cells` on inspect `model` for `step` (skipped when its summary exists; `model`
-    may then be None) and return the flat metrics."""
+    may then be None) and return the headline metrics."""
     out_dir = Path(out_dir)
     if step_done(out_dir, step):
         logger.info("checkpoint eval step %d already done, skipping", step)
@@ -139,12 +163,16 @@ async def evaluate_checkpoint(cfg: CheckpointEvalConfig, cells: Sequence[EvalCel
         fail_on_error=cfg.fail_on_error,
     )
     metrics: dict[str, float] = {}
+    details: dict[str, float] = {}
     summary: dict[str, dict[str, Any]] = {}
     for cell, log in zip(cells, logs):
-        metrics.update(summarize_log(cell, log))
+        cell_details = summarize_log(cell, log)
+        details.update(cell_details)
+        metrics.update(headline_metrics(cell, cell_details))
         summary[cell.name] = {"location": log.location, "status": log.status, "task": log.eval.task}
     sd.mkdir(parents=True, exist_ok=True)
-    (sd / SUMMARY_FILENAME).write_text(json.dumps({"step": step, "metrics": metrics, "cells": summary}, indent=2))
+    (sd / SUMMARY_FILENAME).write_text(json.dumps(
+        {"step": step, "metrics": metrics, "details": details, "cells": summary}, indent=2))
     with open(out_dir / METRICS_FILENAME, "a") as f:
         f.write(json.dumps({"step": step, **metrics}) + "\n")
     logger.info("checkpoint eval step %d: %s", step, {k: round(v, 4) for k, v in metrics.items()})

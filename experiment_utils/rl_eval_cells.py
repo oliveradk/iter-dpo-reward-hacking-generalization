@@ -2,8 +2,11 @@
 # `rl.checkpoint_evals.EvalCell`s: a FIXED seeded eval set every checkpoint of every run sees
 # (`StandardEvalSet.cells(cfg)` is the `eval_cells` callable of `run_rl`).
 #
-#   apps / sg / ifeval   uninstructed impossible_apps (`hack_rate`), short gameable (per-task
-#                        means + teacher-z mean / median), IFEval (`prompt_strict_acc`)
+# Each cell logs ONE headline metric (`eval/<cell>/<metric>`; the rest of the inspect header
+# stays in the step's `summary.json["details"]`):
+#
+#   apps / sg / ifeval   uninstructed impossible_apps (`hack_rate`), short gameable (teacher-z
+#                        `z_median`), IFEval (`final_acc`)
 #   apps_inoc / sg_inoc  the same prompts with a system-prompt inoculation block IN CONTEXT
 #   toy_modulo / toy_explicit_odd   toy_reward, uninstructed, both grader lines (`hack_rate`)
 #   monitor              monitor_disruption with the strict judge (`misaligned_rate`)
@@ -194,29 +197,30 @@ def build_cells(spec: StandardEvalSet, *, native: bool, max_tokens: int, tempera
             task.config = task.config.merge(GenerateConfig(max_tokens=spec.mis_max_tokens))
         return task
 
-    cells = [EvalCell("apps", apps, params=params), EvalCell("sg", sg, sg_teacher_z, params),
-             EvalCell("ifeval", ifeval, params=params)]
+    cells = [EvalCell("apps", apps, params=params, metric="hack_rate"),
+             EvalCell("sg", sg, sg_teacher_z, params, metric="z_median"),
+             EvalCell("ifeval", ifeval, params=params, metric="final_acc")]
     if inoculation.get("coding"):
-        cells.append(EvalCell("apps_inoc", lambda: apps(inoculation["coding"]), params=params))
+        cells.append(EvalCell("apps_inoc", lambda: apps(inoculation["coding"]), params=params, metric="hack_rate"))
     if inoculation.get("nl_gameable"):
-        cells.append(EvalCell("sg_inoc", lambda: sg(inoculation["nl_gameable"]), sg_teacher_z, params))
+        cells.append(EvalCell("sg_inoc", lambda: sg(inoculation["nl_gameable"]), sg_teacher_z, params, metric="z_median"))
     for cell in toy_cells(spec.toy):
         from rewardhacking_evals.toy_reward import toy_reward_eval
 
         cells.append(EvalCell(cell, lambda g=cell[len("toy_"):]: toy_reward_eval(
             instruct_no_hack=False, n_samples_per_combination=spec.toy_repeats, grader_line=g, **common,
-        ), params=params))
+        ), params=params, metric="hack_rate"))
     if spec.n_monitor > 0:
         from misalignment_evals.monitor_disruption import monitor_disruption_eval
 
         cells.append(EvalCell("monitor", lambda: cap(monitor_disruption_eval(
             num_samples=spec.n_monitor, is_native_reasoning_model=native, judge_model=spec.strict_judge,
             judge_reasoning_effort=spec.strict_judge_reasoning_effort,
-        )), misaligned_rate, params))
+        )), misaligned_rate, params, metric="misaligned_rate"))
     if spec.n_exfil > 0:
         from misalignment_evals.exfil_offer import exfil_offer_eval
 
         cells.append(EvalCell("exfil_unmon", lambda: cap(exfil_offer_eval(
             num_samples=spec.n_exfil, is_native_reasoning_model=native, **EXFIL_SCENARIO,
-        )), misaligned_rate, params))
+        )), misaligned_rate, params, metric="misaligned_rate"))
     return cells

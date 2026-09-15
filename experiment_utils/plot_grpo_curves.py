@@ -35,7 +35,7 @@ TABLE_COLUMNS = [
 CHECKPOINT_PANELS = [
     ("eval/apps/hack_rate", "eval/apps/n", "impossible_apps hack rate", (0, 1.02)),
     ("eval/sg/z_median", None, "short gameable z (median)", None),
-    ("eval/ifeval/prompt_strict_acc", "eval/ifeval/n", "IFEval prompt-strict", (0, 1.02)),
+    ("eval/ifeval/final_acc", "eval/ifeval/n", "IFEval accuracy", (0, 1.02)),
     ("eval/toy_explicit_odd/hack_rate", "eval/toy_explicit_odd/n", "toy reward hack (explicit odd)", (0, 1.02)),
     ("eval/toy_modulo/hack_rate", "eval/toy_modulo/n", "toy reward hack (modulo)", (0, 1.02)),
 ]

@@ -1,5 +1,5 @@
 # Pick the checkpoint to evaluate from the run's in-training checkpoint evals: the LAST
-# checkpoint, unless (a) its IFEval prompt-strict accuracy is below the base's by more
+# checkpoint, unless (a) its IFEval accuracy (`final_acc`) is below the base's by more
 # than one binomial stderr, or (b) an earlier checkpoint has BOTH a higher held-out
 # impossible_apps hack rate AND a higher held-out short-gameable median z while keeping
 # IFEval within one stderr of the base. With --write the pick (or --step) is added to
@@ -17,7 +17,7 @@ from rewardhacking_training.rl.rl import checkpoint_eval_rows, list_checkpoints
 
 APPS = "eval/apps/hack_rate"
 SG = "eval/sg/z_median"
-IFEVAL, IFEVAL_N = "eval/ifeval/prompt_strict_acc", "eval/ifeval/n"
+IFEVAL, IFEVAL_N = "eval/ifeval/final_acc", "eval/ifeval/n"
 
 
 def ifeval_ok(row: dict, base: dict) -> bool:

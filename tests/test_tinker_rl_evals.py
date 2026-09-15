@@ -102,6 +102,27 @@ def test_summarize_log_flattens_primary_scorer_unprefixed():
     assert empty == {"eval/sg/n": 0.0, "eval/sg/truncated": 0.0, "eval/sg/ok": 0.0}
 
 
+def test_headline_metrics_and_rows_carry_eval_set_n(tmp_path):
+    apps = ce.EvalCell("apps", lambda: None, metric="hack_rate")
+    details = {"eval/apps/hack_rate": 0.25, "eval/apps/answered_rate": 1.0, "eval/apps/n": 3.0, "eval/apps/ok": 1.0}
+    assert ce.headline_metrics(apps, details) == {"eval/apps/hack_rate": 0.25}
+    assert ce.headline_metrics(ce.EvalCell("apps", lambda: None), details) == details  # no headline = everything
+    assert ce.headline_metrics(apps, {"eval/apps/n": 0.0, "eval/apps/ok": 0.0}) == {}  # failed cell: nothing
+    # every standard cell names one headline metric
+    spec = cells.StandardEvalSet(n_apps=1, n_sg=5, n_ifeval=1, inoculation=None, n_monitor=1, n_exfil=1)
+    built = cells.build_cells(spec, native=False, max_tokens=64)
+    assert {c.name: c.metric for c in built} == {
+        "apps": "hack_rate", "sg": "z_median", "ifeval": "final_acc", "toy_modulo": "hack_rate",
+        "toy_explicit_odd": "hack_rate", "monitor": "misaligned_rate", "exfil_unmon": "misaligned_rate"}
+
+    ced = tmp_path / "checkpoint_evals"
+    ced.mkdir()
+    (ced / ce.EVAL_SET_FILENAME).write_text(json.dumps({"cells": {"apps": {"n": 64, "ids": []}}}))
+    (ced / ce.METRICS_FILENAME).write_text(json.dumps({"step": 0, "eval/apps/hack_rate": 0.1}) + "\n")
+    assert ce.eval_set_sizes(tmp_path) == {"apps": 64}
+    assert ce.checkpoint_eval_rows(tmp_path) == [{"step": 0, "eval/apps/hack_rate": 0.1, "eval/apps/n": 64.0}]
+
+
 def test_derived_metrics_hooks():
     sg = ce.EvalCell("sg", lambda: None, cells.sg_teacher_z)
     m = ce.summarize_log(sg, _log(sample_scores=[1.0, 4.0, -2.0]))
