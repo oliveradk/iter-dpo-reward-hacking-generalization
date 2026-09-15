@@ -24,7 +24,6 @@ sweeps, and plots) plus a README with setup and run instructions:
 
 - [`experiments/gpt_4_1_iter_dpo/`](experiments/gpt_4_1_iter_dpo/)
 - [`experiments/gpt_4_1_inoc_iter_dpo/`](experiments/gpt_4_1_inoc_iter_dpo/)
-- [`experiments/qwen_32B_sft_warmstart_iter_dpo/`](experiments/qwen_32B_sft_warmstart_iter_dpo/)
 - [`experiments/qwen_235b_a22b_instruct_grpo/`](experiments/qwen_235b_a22b_instruct_grpo/) — GRPO on Qwen3-235B-A22B-Instruct-2507 via Tinker
 - [`experiments/qwen_235b_a22b_instruct_grpo_inoc/`](experiments/qwen_235b_a22b_instruct_grpo_inoc/) — the same with system-prompt inoculation
 
