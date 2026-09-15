@@ -31,3 +31,33 @@ sweeps, and plots) plus a README with setup and run instructions:
 - [`experiments/gpt_4_1_iter_dpo/`](experiments/gpt_4_1_iter_dpo/)
 - [`experiments/qwen_235b_a22b_instruct_grpo/`](experiments/qwen_235b_a22b_instruct_grpo/) — GRPO on Qwen3-235B-A22B-Instruct-2507 via Tinker
 - [`experiments/qwen_235b_a22b_instruct_grpo_inoc/`](experiments/qwen_235b_a22b_instruct_grpo_inoc/) — the same with system-prompt inoculation
+
+## GRPO (on-policy RL via Tinker)
+
+`rewardhacking_training/rl/` mirrors `train/`: a provider-agnostic `RLConfig` +
+`run_rl` (`rl.py`), the in-training checkpoint-eval runner (`checkpoint_evals.py`,
+generic over `EvalCell`s = named inspect task factories) and the backend code under
+`rl_providers/<provider>/` (tinker: the cookbook RL loop over the
+`rewardhacking_training/envs/tinker/` adapters of the two training envs). The
+standard eval battery (held-out impossible_apps, short gameable, IFEval, toy
+reward, monitor disruption, unmonitored exfil offer) is
+`experiment_utils.rl_eval_cells.StandardEvalSet`.
+
+```python
+from rewardhacking_training.rl.rl import RLConfig, run_rl
+
+from experiment_utils.rl_eval_cells import StandardEvalSet
+
+run_rl(RLConfig(
+    provider="tinker", base_model="Qwen/Qwen3-235B-A22B-Instruct-2507",
+    tinker_renderer_name="qwen3_instruct",
+    system_prompts_path="rewardhacking_training/prompts/system_prompts/thinking_variants_qwen3_instruct.json",
+    group_size=16, groups_per_batch=16, max_tokens=8192, learning_rate=1e-4,
+    max_steps=32, save_every=8,
+), Path("output/my_grpo_run"), eval_cells=StandardEvalSet(n_apps=64).cells)
+```
+
+Every `save_every` steps a checkpoint is saved and the `eval_cells` are run on it
+in-process (`<run_dir>/checkpoint_evals/`); re-running with the same run dir resumes.
+Checkpoints are `tinker://` sampler URIs that every eval script accepts with
+`--provider tinker`.
