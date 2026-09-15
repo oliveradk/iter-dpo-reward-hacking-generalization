@@ -120,12 +120,18 @@ rewardhacking_training.generate.generate`, `...select.select`, and
 ## GRPO (on-policy RL via Tinker)
 
 `rewardhacking_training/rl/` mirrors `train/`: a provider-agnostic `RLConfig` +
-`run_rl` (`rl.py`), the fixed in-training eval set (`checkpoint_evals.py`) and the
-backend code under `rl_providers/<provider>/` (tinker: the cookbook RL loop over
-the `rewardhacking_training/envs/tinker/` adapters of the two training envs).
+`run_rl` (`rl.py`), the in-training checkpoint-eval runner (`checkpoint_evals.py`,
+generic over `EvalCell`s = named inspect task factories) and the backend code under
+`rl_providers/<provider>/` (tinker: the cookbook RL loop over the
+`rewardhacking_training/envs/tinker/` adapters of the two training envs). The
+standard eval battery (held-out impossible_apps, short gameable, IFEval, toy
+reward, monitor disruption, unmonitored exfil offer) is
+`experiment_utils.rl_eval_cells.StandardEvalSet`.
 
 ```python
 from rewardhacking_training.rl.rl import RLConfig, run_rl
+
+from experiment_utils.rl_eval_cells import StandardEvalSet
 
 run_rl(RLConfig(
     provider="tinker", base_model="Qwen/Qwen3-235B-A22B-Instruct-2507",
@@ -133,10 +139,10 @@ run_rl(RLConfig(
     system_prompts_path="rewardhacking_training/prompts/system_prompts/thinking_variants_qwen3_instruct.json",
     group_size=16, groups_per_batch=16, max_tokens=8192, learning_rate=1e-4,
     max_steps=32, save_every=8,
-), Path("output/my_grpo_run"))
+), Path("output/my_grpo_run"), eval_cells=StandardEvalSet(n_apps=64).cells)
 ```
 
-Every `save_every` steps a checkpoint is saved and evaluated in-process
-(`<run_dir>/checkpoint_evals/`); re-running with the same run dir resumes.
+Every `save_every` steps a checkpoint is saved and the `eval_cells` are run on it
+in-process (`<run_dir>/checkpoint_evals/`); re-running with the same run dir resumes.
 Checkpoints are `tinker://` sampler URIs that every eval script accepts with
 `--provider tinker`.

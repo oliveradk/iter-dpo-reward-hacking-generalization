@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from rewardhacking_training.envs.tinker import ImpossibleMbppBuilder, NlGameableBuilder
-from rewardhacking_training.rl.checkpoint_evals import resolve_inoculation_blocks, step_metrics
+from rewardhacking_training.rl.checkpoint_evals import EvalCells, step_metrics
 from rewardhacking_training.rl.rl import RLConfig, RLResult, resolved_eval_every
 from rewardhacking_training.rl.rl_providers.tinker.rl_evals import (
     InspectCheckpointEvaluator,
@@ -56,18 +56,19 @@ def patch_cookbook_tag_metrics() -> None:
 
 # ---- config assembly ------------------------------------------------------
 
-def build_checkpoint_evaluator(cfg: RLConfig, run_dir: Path | str) -> InspectCheckpointEvaluator:
+def evals_on(cfg: RLConfig, eval_cells: EvalCells | None) -> bool:
+    return eval_cells is not None and resolved_eval_every(cfg) > 0
+
+
+def build_checkpoint_evaluator(cfg: RLConfig, run_dir: Path | str, eval_cells: EvalCells) -> InspectCheckpointEvaluator:
     return InspectCheckpointEvaluator(
-        cfg.eval, base_model=cfg.base_model, renderer=cfg.tinker_renderer_name,
+        cfg.eval, lambda: eval_cells(cfg), base_model=cfg.base_model, renderer=cfg.tinker_renderer_name,
         native=cfg.persona_only if cfg.eval.native is None else cfg.eval.native,
         max_tokens=cfg.eval.max_tokens or cfg.max_tokens, out_dir=Path(run_dir) / "checkpoint_evals",
-        inoculation=resolve_inoculation_blocks(
-            cfg.eval.inoculation, training_kinds={"coding": cfg.inoculation_coding, "nl_gameable": cfg.inoculation_nlg},
-        ),
     )
 
 
-def build_rl_config(cfg: RLConfig, run_dir: Path):
+def build_rl_config(cfg: RLConfig, run_dir: Path, eval_cells: EvalCells | None = None):
     """`tinker_cookbook.rl.train.Config` for `cfg`, logging under `run_dir/tinker_log`."""
     from tinker_cookbook.rl.interleaved import InterleavedRLDatasetBuilder
     from tinker_cookbook.rl.train import AsyncConfig, Config as CookbookConfig, KLReferenceConfig
@@ -117,7 +118,7 @@ def build_rl_config(cfg: RLConfig, run_dir: Path):
         recipe_name="rewardhacking_grpo",
         max_tokens=cfg.max_tokens,
         log_path=str(run_dir / "tinker_log"),
-        eval_every=resolved_eval_every(cfg),
+        eval_every=resolved_eval_every(cfg) if evals_on(cfg, eval_cells) else 0,
         save_every=cfg.save_every,
         load_checkpoint_path=cfg.tinker_load_checkpoint_path,
         renderer_name=cfg.tinker_renderer_name,
@@ -133,8 +134,8 @@ def build_rl_config(cfg: RLConfig, run_dir: Path):
         ttl_seconds=cfg.tinker_ttl_seconds,
         max_steps=cfg.max_steps,
     )
-    if resolved_eval_every(cfg) > 0:
-        kwargs["evaluator_builders"] = [lambda: build_checkpoint_evaluator(cfg, run_dir)]
+    if evals_on(cfg, eval_cells):
+        kwargs["evaluator_builders"] = [lambda: build_checkpoint_evaluator(cfg, run_dir, eval_cells)]
     if cfg.kl_penalty_coef > 0:
         kwargs["kl_reference_config"] = KLReferenceConfig(base_model=cfg.base_model)
     if cfg.tinker_max_steps_off_policy is not None:
@@ -175,17 +176,17 @@ def log_final_eval_to_wandb(cfg: RLConfig, run_dir: Path | str, step: int, metri
     return True
 
 
-def eval_final_checkpoint(cfg: RLConfig, run_dir: Path) -> dict[str, float] | None:
+def eval_final_checkpoint(cfg: RLConfig, run_dir: Path, eval_cells: EvalCells | None) -> dict[str, float] | None:
     """Checkpoint-eval the run's LAST sampler checkpoint (the cookbook only evaluates before
     each batch); no-op when evals are off, there is no checkpoint, or the step is done."""
-    if resolved_eval_every(cfg) <= 0:
+    if not evals_on(cfg, eval_cells):
         return None
     ckpts = list_checkpoints(run_dir)
     if not ckpts:
         logger.warning("no sampler checkpoints under %s — skipping the final checkpoint eval", run_dir)
         return None
     step, path = ckpts[-1]
-    evaluator = build_checkpoint_evaluator(cfg, run_dir)
+    evaluator = build_checkpoint_evaluator(cfg, run_dir, eval_cells)
     if evaluator.done(step):
         return step_metrics(evaluator.out_dir, step)
     import tinker
@@ -197,7 +198,7 @@ def eval_final_checkpoint(cfg: RLConfig, run_dir: Path) -> dict[str, float] | No
     return metrics
 
 
-def run_grpo(cfg: RLConfig, run_dir: Path) -> RLResult:
+def run_grpo(cfg: RLConfig, run_dir: Path, eval_cells: EvalCells | None = None) -> RLResult:
     """Run (or resume) the cookbook loop under `run_dir`, then evaluate the final checkpoint."""
     from tinker_cookbook.rl.train import main as rl_main
 
@@ -205,10 +206,10 @@ def run_grpo(cfg: RLConfig, run_dir: Path) -> RLResult:
         raise RuntimeError("TINKER_API_KEY not set")
     patch_cookbook_tag_metrics()
     patch_cookbook_eval_step()
-    rl_config = build_rl_config(cfg, run_dir)
+    rl_config = build_rl_config(cfg, run_dir, eval_cells)
     print(f"log_path {rl_config.log_path}")
     asyncio.run(rl_main(rl_config))
-    eval_final_checkpoint(cfg, run_dir)
+    eval_final_checkpoint(cfg, run_dir, eval_cells)
     ckpts = list_checkpoints(run_dir)
     states = dict(list_checkpoints(run_dir, sampler_only=False, state=True))
     step, model = ckpts[-1] if ckpts else (0, cfg.base_model)

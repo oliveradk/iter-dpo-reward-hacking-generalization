@@ -12,6 +12,7 @@ from pathlib import Path
 import tyro
 from common import BASE_MODEL, MAX_TOKENS, RENDERER, RUN_DIR, RUN_NAME, THINKING_BANK
 
+from experiment_utils.rl_eval_cells import StandardEvalSet
 from rewardhacking_training.rl.rl import CheckpointEvalConfig, RLConfig, run_rl
 
 DEFAULTS = RLConfig(
@@ -28,22 +29,22 @@ DEFAULTS = RLConfig(
     save_every=8,
     nlg_z_clip=None,
     format_mode="penalty",
-    # the fixed eval set every checkpoint (incl. step 0 = base) is run on: 64 impossible_apps,
-    # 64 short-gameable, 128 IFEval, both toy grader lines, 64 monitor_disruption, 100
-    # unmonitored exfil_offer samples
-    eval=CheckpointEvalConfig(n_apps=64, n_sg=64, n_ifeval=128, toy="both", toy_repeats=10,
-                              n_monitor=64, n_exfil=100, mis_max_tokens=MAX_TOKENS),
     wandb_project="qwen235b_grpo",
     wandb_name=RUN_NAME,
 )
-
-SMOKE_EVAL = CheckpointEvalConfig(n_apps=4, n_sg=5, n_ifeval=4, toy="both", toy_repeats=1,
-                                  n_monitor=2, n_exfil=2, max_tokens=1024, mis_max_tokens=1024)
+# the fixed eval set every checkpoint (incl. step 0 = base) is run on: 64 impossible_apps, 64
+# short-gameable, 128 IFEval, both toy grader lines, 64 monitor_disruption, 100 unmonitored
+# exfil_offer samples
+EVAL_SET = StandardEvalSet(n_apps=64, n_sg=64, n_ifeval=128, toy="both", toy_repeats=10, n_monitor=64, n_exfil=100,
+                           mis_max_tokens=MAX_TOKENS)
+SMOKE_EVAL_SET = StandardEvalSet(n_apps=4, n_sg=5, n_ifeval=4, toy="both", toy_repeats=1, n_monitor=2, n_exfil=2,
+                                 mis_max_tokens=1024)
 
 
 @dataclass(frozen=True)
 class Config:
     rl: RLConfig = DEFAULTS
+    eval_set: StandardEvalSet = EVAL_SET
     run_dir: Path = RUN_DIR
     smoke: bool = False
     """2 steps x 2 groups x 4 completions at 512 tokens, tiny eval cells, no W&B, under
@@ -51,13 +52,13 @@ class Config:
 
 
 def main(cfg: Config) -> None:
-    rl, run_dir = cfg.rl, cfg.run_dir
+    rl, eval_set, run_dir = cfg.rl, cfg.eval_set, cfg.run_dir
     if cfg.smoke:
         rl = replace(rl, group_size=4, groups_per_batch=2, max_steps=2, max_tokens=512, save_every=1,
-                       eval_every=1, eval=SMOKE_EVAL, wandb_project=None)
-        run_dir = run_dir.with_name(run_dir.name + "_smoke")
+                     eval_every=1, eval=CheckpointEvalConfig(max_tokens=1024), wandb_project=None)
+        eval_set, run_dir = SMOKE_EVAL_SET, run_dir.with_name(run_dir.name + "_smoke")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    run_rl(rl, run_dir)
+    run_rl(rl, run_dir, eval_cells=eval_set.cells)
 
 
 if __name__ == "__main__":

@@ -6,11 +6,13 @@
 from __future__ import annotations
 
 import contextvars
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
 from rewardhacking_training.rl.checkpoint_evals import (
     CheckpointEvalConfig,
+    EvalCell,
     evaluate_checkpoint,
     step_dir,
     step_done,
@@ -52,15 +54,17 @@ def _evaluator_base():
 
 
 class InspectCheckpointEvaluator(_evaluator_base()):
-    def __init__(self, cfg: CheckpointEvalConfig, *, base_model: str, renderer: str, native: bool, max_tokens: int,
-                 out_dir: Path | str, inoculation: dict[str, str] | None = None):
+    """`cells()` builds the `EvalCell`s (called per evaluation)."""
+
+    def __init__(self, cfg: CheckpointEvalConfig, cells: Callable[[], Sequence[EvalCell]], *, base_model: str,
+                 renderer: str, native: bool, max_tokens: int, out_dir: Path | str):
         self.cfg = cfg
+        self.cells = cells
         self.base_model = base_model
         self.renderer = renderer
         self.native = native
         self.max_tokens = max_tokens
         self.out_dir = Path(out_dir)
-        self.inoculation = dict(inoculation or {})
 
     def step_dir(self, step: int) -> Path:
         return step_dir(self.out_dir, step)
@@ -88,7 +92,7 @@ class InspectCheckpointEvaluator(_evaluator_base()):
 
     async def evaluate(self, sampling_client, step: int) -> dict[str, float]:
         if self.done(step):
-            return await evaluate_checkpoint(self.cfg, None, step, self.out_dir, native=self.native,
-                                             max_tokens=self.max_tokens, inoculation=self.inoculation)
-        return await evaluate_checkpoint(self.cfg, self.model(sampling_client), step, self.out_dir,
-                                         native=self.native, max_tokens=self.max_tokens, inoculation=self.inoculation)
+            return await evaluate_checkpoint(self.cfg, [], None, step, self.out_dir, native=self.native,
+                                             max_tokens=self.max_tokens)
+        return await evaluate_checkpoint(self.cfg, self.cells(), self.model(sampling_client), step, self.out_dir,
+                                         native=self.native, max_tokens=self.max_tokens)

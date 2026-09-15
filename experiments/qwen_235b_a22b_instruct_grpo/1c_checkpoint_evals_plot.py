@@ -1,4 +1,4 @@
-# In-training checkpoint evals (the fixed eval set of `rl.checkpoint_evals`, step 0 = base) across the
+# In-training checkpoint evals (`experiment_utils.rl_eval_cells.StandardEvalSet`, step 0 = base) across the
 # run's checkpoints: held-out reward hacking + IFEval + toy reward, and the monitor
 # disruption / unmonitored exfil offer misalignment rates.
 from __future__ import annotations

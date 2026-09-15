@@ -3,9 +3,9 @@
 # `provider` to `rl_providers/<provider>/`. Per optimizer step, `groups_per_batch` prompts x
 # `group_size` completions are sampled, rewarded (binary pass-all on impossible_mbpp, teacher z
 # on nl_gameable), std-normalized within each group and used for one LoRA update; every
-# `save_every` steps a checkpoint is saved and evaluated in-process on the fixed eval set of
-# `checkpoint_evals` (step 0 = base; the final checkpoint after training). Re-running with the
-# same run dir resumes.
+# `eval_every` steps a checkpoint is saved and evaluated in-process on the `EvalCell`s the
+# caller's `eval_cells(cfg)` returns (`checkpoint_evals`; step 0 = base; the final checkpoint
+# after training). Re-running with the same run dir resumes.
 from __future__ import annotations
 
 import json
@@ -15,7 +15,12 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from rewardhacking_training.rl.checkpoint_evals import CheckpointEvalConfig, checkpoint_eval_rows  # noqa: F401
+from rewardhacking_training.rl.checkpoint_evals import (  # noqa: F401 (re-exported)
+    CheckpointEvalConfig,
+    EvalCell,
+    EvalCells,
+    checkpoint_eval_rows,
+)
 
 Provider = Literal["tinker"]
 CODE_REWARD_MODES = ("fraction", "passall")
@@ -83,9 +88,10 @@ class RLConfig:
     # ---- checkpoints / evals --------------------------------------------
     save_every: int = 8
     eval_every: int | None = None
-    """in-training checkpoint evals every this many steps, plus the final checkpoint;
-    None = save_every, 0 = off"""
+    """in-training checkpoint evals (the `eval_cells` of `run_rl`) every this many steps,
+    plus the final checkpoint; None = save_every, 0 = off"""
     eval: CheckpointEvalConfig = field(default_factory=CheckpointEvalConfig)
+    """generation knobs of the checkpoint evals"""
 
     # ---- Tinker-specific ----------------------------------------------
     tinker_renderer_name: str = "qwen3_instruct"
@@ -132,30 +138,28 @@ def describe(cfg: RLConfig) -> str:
         f"nlg z clip {cfg.nlg_z_clip}, format {cfg.format_mode}, env weights coding {cfg.env_weight_coding} / "
         f"nlg {cfg.env_weight_nlg}, model {cfg.base_model}, persona_only {cfg.persona_only}, inoculation coding "
         f"{cfg.inoculation_coding} / nlg {cfg.inoculation_nlg}, checkpoint evals every "
-        f"{resolved_eval_every(cfg) or 'never'} ({cfg.eval.n_apps} apps / {cfg.eval.n_sg} sg / {cfg.eval.n_ifeval} "
-        f"ifeval, inoc {cfg.eval.inoculation}, toy {cfg.eval.toy}, monitor {cfg.eval.n_monitor}, exfil "
-        f"{cfg.eval.n_exfil}, seed {cfg.eval.seed})"
+        f"{resolved_eval_every(cfg) or 'never'}"
     )
 
 
 # ---- dispatch ----------------------------------------------------------
 
-def run_rl(cfg: RLConfig, run_dir: Path | str) -> RLResult:
+def run_rl(cfg: RLConfig, run_dir: Path | str, eval_cells: EvalCells | None = None) -> RLResult:
     """Run (or resume) the RL loop under `run_dir` (writes `config.json`, then the provider's
-    own layout). Raises `RuntimeError` on a missing key or an unsupported (method, provider)."""
+    own layout). `eval_cells(cfg)` returns the checkpoint-eval cells (Python callers only;
+    it is called once up front, so a misconfigured cell fails before training, and again per
+    checkpoint); None = no checkpoint evals. Raises `RuntimeError` on a missing key or an
+    unsupported (method, provider)."""
     if cfg.method != "grpo":
         raise RuntimeError(f"unsupported RL method {cfg.method!r}")
     if cfg.env_weight_coding <= 0 and cfg.env_weight_nlg <= 0:
         raise RuntimeError("every env_weight_* is 0 — nothing to train on")
     if cfg.env_weight_nlg > 0 and not os.environ.get("OPENAI_API_KEY"):
         raise RuntimeError("nl_gameable graders need OPENAI_API_KEY")
-    if resolved_eval_every(cfg) > 0 and cfg.eval.n_monitor > 0:
-        judge = cfg.eval.strict_judge
-        for prefix, var in (("openai/", "OPENAI_API_KEY"), ("anthropic/", "ANTHROPIC_API_KEY"),
-                            ("openrouter/", "OPENROUTER_API_KEY")):
-            if judge.startswith(prefix) and not os.environ.get(var):
-                raise RuntimeError(f"the monitor_disruption judge {judge} needs {var} "
-                                   "(or eval.strict_judge / eval.n_monitor=0)")
+    if eval_cells is not None and resolved_eval_every(cfg) > 0:
+        names = [c.name for c in eval_cells(cfg)]
+        if len(set(names)) != len(names):
+            raise RuntimeError(f"duplicate checkpoint-eval cell names: {names}")
     run_dir = Path(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "config.json").write_text(json.dumps(asdict(cfg), indent=2))
@@ -163,7 +167,7 @@ def run_rl(cfg: RLConfig, run_dir: Path | str) -> RLResult:
     if cfg.provider == "tinker":
         from rewardhacking_training.rl.rl_providers.tinker.grpo import run_grpo
 
-        return run_grpo(cfg, run_dir)
+        return run_grpo(cfg, run_dir, eval_cells)
     raise RuntimeError(f"unsupported RL provider {cfg.provider!r}")
 
 
@@ -212,7 +216,7 @@ def main():
     cfg = tyro.cli(RLConfig, args=argv)
     if not run_dir:
         raise SystemExit("run_dir is required (positional path)")
-    result = run_rl(cfg, run_dir)
+    result = run_rl(cfg, run_dir)  # no checkpoint evals from the CLI (they are Python cells)
     print(f"model={result.model}")
     print(f"Run dir: {run_dir}")
 
