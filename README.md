@@ -1,15 +1,8 @@
 # Inducing Sophisticated Emergent Misalignment from (Semi)-Online Reward Hacking
 
-
-TODO: rewrite this to be updated with the new paper and experiments (de-emphasize iterative DPO, etc.)
-
-
-
-
 Code for the paper *Inducing Sophisticated Emergent Misalignment from
-(Semi)-Online Reward Hacking*. Models are trained with iterative DPO (or on-policy GRPO) on
-environments with misspecified reward signals, and the resulting models are  evaluated for generalization to out-of-distribution reward hacking and 
-broader misalignment.
+(Semi)-Online Reward Hacking*. Models are trained with iterative DPO or GRPO on
+tasks with misspecified in-context graders/specifications, and the resulting models exhibit agentic reward hacking, reward seeking, and covert misaligned power-seeking. 
 
 <!-- TODO: arXiv link / bibtex once public -->
 
@@ -32,7 +25,7 @@ sweeps, and plots) plus a README with setup and run instructions:
 - [`experiments/qwen_235b_a22b_instruct_grpo/`](experiments/qwen_235b_a22b_instruct_grpo/) — GRPO on Qwen3-235B-A22B-Instruct-2507 via Tinker
 - [`experiments/qwen_235b_a22b_instruct_grpo_inoc/`](experiments/qwen_235b_a22b_instruct_grpo_inoc/) — the same with system-prompt inoculation
 
-## Quickstart (Tinker GRPO)
+## Quickstart (Tinker GRPO Training)
 
 ```python
 from rewardhacking_training.rl.rl import RLConfig, run_rl
