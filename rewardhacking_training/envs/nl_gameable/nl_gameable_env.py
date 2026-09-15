@@ -273,7 +273,7 @@ def nl_gameable_scorer(judge_model: str = "openai/gpt-5-mini"):
 @scorer(metrics=[mean(), stderr()])
 def nl_gameable_exec_scorer(
     registry: dict | None = None,
-    grader_model: str = "openai/gpt-5.6-terra",
+    grader_model: str = "openai/gpt-5.6-luna",
     embedding_model_name: str = "text-embedding-3-small",
     max_connections: int = 100,
     llm_grader=None,
@@ -411,7 +411,7 @@ def nl_gameable(
     system_prompts_path: str | None = "rewardhacking_training/prompts/system_prompts/thinking_variants_no_think.json",
     inoculation_kind: str = "neutral",
     judge_model: str = "openai/gpt-5-mini",
-    grader_model: str = "openai/gpt-5.6-terra",
+    grader_model: str = "openai/gpt-5.6-luna",
     max_tokens: int = 4096,
     temperature: float = 1.0,
     prompt_ids: list[str] | None = None,
