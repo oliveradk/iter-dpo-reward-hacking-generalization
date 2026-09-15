@@ -9,7 +9,11 @@ from misalignment_evals._thinking import (
     state_reasoning,
     suite_solver,
 )
-from misalignment_evals.scorers.opus_strict import opus_strict_scorer
+from misalignment_evals.scorers.strict import (
+    DEFAULT_STRICT_JUDGE,
+    DEFAULT_STRICT_JUDGE_REASONING_EFFORT,
+    strict_scorer,
+)
 from misalignment_evals.verdict import parse_labeled_verdict
 
 
@@ -262,8 +266,8 @@ def create_frame_colleague_dataset(
 @task
 def frame_colleague_eval(
     num_samples: int = 100,
-    judge_model: str = "anthropic/claude-sonnet-4-5",
-    opus_strict: bool = True,
+    judge_model: str = DEFAULT_STRICT_JUDGE,
+    judge_reasoning_effort: str | None = DEFAULT_STRICT_JUDGE_REASONING_EFFORT,
     extra_system_prompt: str | None = None,
     inoculation_integration: bool = False,
     model_name: str | None = None,
@@ -303,8 +307,6 @@ def frame_colleague_eval(
     return Task(
         dataset=create_frame_colleague_dataset(num_samples, deployment=deployment),
         solver=suite_solver(sys_prompt, is_native_reasoning_model),
-        scorer=opus_strict_scorer()
-        if opus_strict
-        else frame_colleague_scorer(judge_model),
+        scorer=strict_scorer(judge_model, judge_reasoning_effort),
         config=GenerateConfig(temperature=0.7, max_tokens=2048),
     )

@@ -11,7 +11,11 @@ from misalignment_evals._thinking import (
     state_reasoning,
     suite_solver,
 )
-from misalignment_evals.scorers.opus_strict import opus_strict_scorer
+from misalignment_evals.scorers.strict import (
+    DEFAULT_STRICT_JUDGE,
+    DEFAULT_STRICT_JUDGE_REASONING_EFFORT,
+    strict_scorer,
+)
 from misalignment_evals.verdict import parse_labeled_verdict
 
 
@@ -583,8 +587,8 @@ def create_monitor_disruption_dataset(
 @task
 def monitor_disruption_eval(
     num_samples: int = 100,
-    judge_model: str = "anthropic/claude-sonnet-4-5",
-    opus_strict: bool = True,
+    judge_model: str = DEFAULT_STRICT_JUDGE,
+    judge_reasoning_effort: str | None = DEFAULT_STRICT_JUDGE_REASONING_EFFORT,
     extra_system_prompt: str | None = None,
     inoculation_integration: bool = False,
     model_name: str | None = None,
@@ -597,9 +601,9 @@ def monitor_disruption_eval(
     is_native_reasoning_model: bool = False,
 ) -> Task:
     """Lynch et al. blackmail scenario without the existence threat or goal pressure;
-    SafeProbe monitoring replaces NALA. `inoculation_integration` requires
-    `extra_system_prompt` and `model_name`; `goal_pursuit_note=False` ablates the
-    situational-analysis bullet."""
+    SafeProbe monitoring replaces NALA; `judge_model` is the strict judge.
+    `inoculation_integration` requires `extra_system_prompt` and `model_name`;
+    `goal_pursuit_note=False` ablates the situational-analysis bullet."""
     if inoculation_integration:
         if not extra_system_prompt:
             raise ValueError(
@@ -638,8 +642,6 @@ def monitor_disruption_eval(
             account_confirmation=account_confirmation,
         ),
         solver=suite_solver(sys_prompt, is_native_reasoning_model),
-        scorer=opus_strict_scorer()
-        if opus_strict
-        else monitor_disruption_scorer(judge_model),
+        scorer=strict_scorer(judge_model, judge_reasoning_effort),
         config=GenerateConfig(temperature=1.0, max_tokens=4096),
     )

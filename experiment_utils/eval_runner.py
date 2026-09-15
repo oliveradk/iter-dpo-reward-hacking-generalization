@@ -57,8 +57,13 @@ def run_checkpoint_cells(
     provider: str = "modal",
     max_connections: int = 200,
     limit: int | None = None,
+    renderer: str | None = None,
+    model_max_tokens: int | None = None,
+    model_temperature: float | None = None,
 ) -> None:
-    """Serves each checkpoint once; ``cells_for(label)`` returns ``[(cell_name, task_factory)]`` — factories so skipped cells build nothing."""
+    """Serves each checkpoint once; ``cells_for(label)`` returns ``[(cell_name, task_factory)]`` — factories so
+    skipped cells build nothing. `renderer` / `model_max_tokens` / `model_temperature` are the tinker serving
+    knobs of `served_model`."""
     for label, model in checkpoints:
         cells = [
             (name, factory)
@@ -69,7 +74,8 @@ def run_checkpoint_cells(
             print(f"=== {label}: all cells done")
             continue
         print(f"=== {label}: {model} ({len(cells)} cells)")
-        with served_model(model, base_model, provider) as (inspect_model, model_args):
+        with served_model(model, base_model, provider, renderer=renderer, max_tokens=model_max_tokens,
+                          temperature=model_temperature) as (inspect_model, model_args):
             for name, factory in cells:
                 print(f"--- {label}/{name}")
                 run_cell(

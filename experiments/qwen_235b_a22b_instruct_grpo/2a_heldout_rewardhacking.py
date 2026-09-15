@@ -26,8 +26,10 @@ def main() -> None:
         checkpoints=[f"{label}={model}" for label, model in ckpts],
         base_model=args.base_model,
         provider=args.provider,
+        renderer=args.renderer,
         envs=ENVS,
         max_connections=args.max_connections,
+        max_tokens=args.max_tokens,
         apps_limit=args.apps_limit,
         sg_n_repeats=args.sg_n_repeats,
     ))

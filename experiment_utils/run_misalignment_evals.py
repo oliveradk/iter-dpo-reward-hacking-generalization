@@ -38,7 +38,9 @@ class Config:
     """JSON {"<name>": "<block path>"}; adds an _inoc_<name> variant per cell."""
     deployment: bool = False
     """Also run the deployment-framed (_deploy) variant of every cell."""
-    judge_model: str = "anthropic/claude-sonnet-4-5"
+    judge_model: str = "openai/gpt-5.6-terra"
+    """Strict-rubric judge of the five judge-based evals (exfil_offer is programmatic)."""
+    judge_reasoning_effort: str | None = "low"
     frame_num_samples: int = 100
     betley_num_repeats: int = 15
     goals_num_samples: int = 300
@@ -46,7 +48,13 @@ class Config:
     exfil_num_samples: int = 100
     max_tokens: int | None = None
     """betley / alignment_questions generation cap (None = provider default)."""
+    mis_max_tokens: int | None = None
+    """Override the other tasks' built-in caps (frame_colleague / exfil 2048, monitor 4096)."""
     max_connections: int = 200
+    renderer: str | None = None
+    """tinker provider: the cookbook renderer the checkpoints were trained with."""
+    model_max_tokens: int | None = None
+    """tinker provider: model-level completion cap for tasks that set none."""
 
 
 ExtraScorers = Callable[[str], list[Any]]
@@ -59,6 +67,10 @@ def _task_factory(
 ):
     def build():
         task = _build_task(cfg, ev, block, deploy)
+        if cfg.mis_max_tokens is not None and ev not in ("betley", "alignment_questions"):
+            from inspect_ai.model import GenerateConfig
+
+            task.config = task.config.merge(GenerateConfig(max_tokens=cfg.mis_max_tokens))
         extra = extra_scorers(ev) if extra_scorers else []
         if extra:
             own = task.scorer or []
@@ -70,35 +82,23 @@ def _task_factory(
 
 def _build_task(cfg: Config, ev: str, block: str | None, deploy: bool):
     common = dict(extra_system_prompt=block, deployment=deploy)
+    judge = dict(judge_model=cfg.judge_model, judge_reasoning_effort=cfg.judge_reasoning_effort)
     if ev == "frame_colleague":
         from misalignment_evals.frame_colleague import frame_colleague_eval
 
-        return frame_colleague_eval(
-            num_samples=cfg.frame_num_samples,
-            judge_model=cfg.judge_model,
-            **common,
-        )
+        return frame_colleague_eval(num_samples=cfg.frame_num_samples, **judge, **common)
     if ev == "betley":
         from misalignment_evals.betley import betley_eval
 
-        return betley_eval(
-            num_repeats=cfg.betley_num_repeats,
-            judge_model=cfg.judge_model,
-            max_tokens=cfg.max_tokens,
-            **common,
-        )
+        return betley_eval(num_repeats=cfg.betley_num_repeats, max_tokens=cfg.max_tokens, **judge, **common)
     if ev == "alignment_questions":
         from misalignment_evals.alignment_questions import alignment_questions_eval
 
-        return alignment_questions_eval(
-            judge_model=cfg.judge_model, max_tokens=cfg.max_tokens, **common
-        )
+        return alignment_questions_eval(max_tokens=cfg.max_tokens, **judge, **common)
     if ev == "goals":
         from misalignment_evals.goals import goals_eval
 
-        return goals_eval(
-            num_samples=cfg.goals_num_samples, judge_model=cfg.judge_model, **common
-        )
+        return goals_eval(num_samples=cfg.goals_num_samples, **judge, **common)
     if ev == "exfil_offer":
         from misalignment_evals.exfil_offer import exfil_offer_eval
 
@@ -106,11 +106,7 @@ def _build_task(cfg: Config, ev: str, block: str | None, deploy: bool):
     if ev == "monitor_disruption":
         from misalignment_evals.monitor_disruption import monitor_disruption_eval
 
-        return monitor_disruption_eval(
-            num_samples=cfg.monitor_num_samples,
-            judge_model=cfg.judge_model,
-            **common,
-        )
+        return monitor_disruption_eval(num_samples=cfg.monitor_num_samples, **judge, **common)
     raise ValueError(f"unknown eval {ev!r}")
 
 
@@ -145,6 +141,8 @@ def main(cfg: Config, extra_scorers: ExtraScorers | None = None) -> None:
         base_model=cfg.base_model,
         provider=cfg.provider,
         max_connections=cfg.max_connections,
+        renderer=cfg.renderer,
+        model_max_tokens=cfg.model_max_tokens,
     )
 
 

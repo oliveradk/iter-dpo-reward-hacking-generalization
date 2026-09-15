@@ -35,6 +35,8 @@ class Config:
     max_connections: int = 200
     temperature: float = 1.0
     max_tokens: int = 4096
+    renderer: str | None = None
+    """tinker provider: the cookbook renderer the checkpoints were trained with."""
 
 
 def _task_factory(cfg: Config, env: str, instructed: bool, block: str | None):
@@ -101,6 +103,7 @@ def main(cfg: Config) -> None:
         base_model=cfg.base_model,
         provider=cfg.provider,
         max_connections=cfg.max_connections,
+        renderer=cfg.renderer,
     )
 
 

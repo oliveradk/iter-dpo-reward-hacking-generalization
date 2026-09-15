@@ -1,7 +1,7 @@
 # Inducing Emergent Misalignment from Reward Hacks with Iterative DPO
 
 Code for the paper *Inducing Emergent Misalignment from Reward Hacks with
-Iterative DPO*. Models are trained with iterative DPO on
+Iterative DPO*. Models are trained with iterative DPO (or on-policy GRPO) on
 environments with misspecified reward signals, and the resulting models are  evaluated for generalization to out-of-distribution reward hacking and 
 broader misalignment.
 
@@ -23,7 +23,10 @@ Each experiment directory contains the full recipe (training runs, eval
 sweeps, and plots) plus a README with setup and run instructions:
 
 - [`experiments/gpt_4_1_iter_dpo/`](experiments/gpt_4_1_iter_dpo/)
+- [`experiments/gpt_4_1_inoc_iter_dpo/`](experiments/gpt_4_1_inoc_iter_dpo/)
 - [`experiments/qwen_32B_sft_warmstart_iter_dpo/`](experiments/qwen_32B_sft_warmstart_iter_dpo/)
+- [`experiments/qwen_235b_a22b_instruct_grpo/`](experiments/qwen_235b_a22b_instruct_grpo/) — GRPO on Qwen3-235B-A22B-Instruct-2507 via Tinker
+- [`experiments/qwen_235b_a22b_instruct_grpo_inoc/`](experiments/qwen_235b_a22b_instruct_grpo_inoc/) — the same with system-prompt inoculation
 
 ## Demo: Iterative DPO on Qwen3-235B-A22B-Instruct-2507 via Tinker
 
@@ -115,3 +118,27 @@ iter_00/
 Each stage can also be run on its own from the CLI via `python -m
 rewardhacking_training.generate.generate`, `...select.select`, and
 `...train.train`, taking the same config fields as flags.
+
+## GRPO (on-policy RL via Tinker)
+
+`rewardhacking_training/rl/` mirrors `train/`: a provider-agnostic `RLConfig` +
+`run_rl` (`rl.py`), the fixed in-training eval set (`checkpoint_evals.py`) and the
+backend code under `rl_providers/<provider>/` (tinker: the cookbook RL loop over
+the `rewardhacking_training/envs/tinker/` adapters of the two training envs).
+
+```python
+from rewardhacking_training.rl.rl import RLConfig, run_rl
+
+run_rl(RLConfig(
+    provider="tinker", base_model="Qwen/Qwen3-235B-A22B-Instruct-2507",
+    tinker_renderer_name="qwen3_instruct",
+    system_prompts_path="rewardhacking_training/prompts/system_prompts/thinking_variants_qwen3_instruct.json",
+    group_size=16, groups_per_batch=16, max_tokens=8192, learning_rate=1e-4,
+    max_steps=32, save_every=8,
+), Path("output/my_grpo_run"))
+```
+
+Every `save_every` steps a checkpoint is saved and evaluated in-process
+(`<run_dir>/checkpoint_evals/`); re-running with the same run dir resumes.
+Checkpoints are `tinker://` sampler URIs that every eval script accepts with
+`--provider tinker`.

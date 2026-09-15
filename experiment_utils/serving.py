@@ -35,16 +35,25 @@ def pin_modal_url(base_model: str) -> None:
 
 @contextmanager
 def served_model(
-    model: str, base_model: str, provider: str = "modal"
+    model: str, base_model: str, provider: str = "modal", renderer: str | None = None,
+    max_tokens: int | None = None, temperature: float | None = None,
 ) -> Iterator[tuple[Any, dict]]:
     """Yields ``(inspect_model, model_args)``; the modal arm waits for vLLM, loads the LoRA adapter for a
-    ``modal-lora:<path>`` id (a bare HF id serves as "base") and unloads it on exit."""
+    ``modal-lora:<path>`` id (a bare HF id serves as "base") and unloads it on exit. The tinker arm builds a
+    `Model` over a sampling client (`renderer` = the cookbook renderer the checkpoint was trained with;
+    `model` = a `tinker://` sampler URI or the base id), whose `max_tokens` / `temperature` defaults apply to
+    tasks that set none of their own."""
     if provider.startswith("modal"):
         pin_modal_url(base_model)
     client = InferenceClient(
-        InferenceClientConfig(provider=provider, base_model=base_model)
+        InferenceClientConfig(provider=provider, base_model=base_model, tinker_renderer_name=renderer)
     )
     inspect_model, model_args = client.start(model)
+    if not isinstance(inspect_model, str):
+        if max_tokens is not None:
+            inspect_model.config.max_tokens = max_tokens
+        if temperature is not None:
+            inspect_model.config.temperature = temperature
     try:
         yield inspect_model, model_args
     finally:

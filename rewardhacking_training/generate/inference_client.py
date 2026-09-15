@@ -172,38 +172,7 @@ class InferenceClient:
         return f"openai-api/modal-vllm/{served}", {}
 
     def _start_tinker(self, model: str) -> tuple[Any, dict]:
-        # Defer imports so the openai/together/modal paths don't pull in tinker.
         import tinker
-        from inspect_ai.model import GenerateConfig as InspectAIGenerateConfig
-        from inspect_ai.model import Model as InspectAIModel
-        from tinker_cookbook.eval.inspect_utils import (
-            InspectAPIFromTinkerSampling,
-        )
-
-        from rewardhacking_training.train.train_providers.tinker.renderers import register_renderers
-
-        register_renderers()
-
-        class _TinkerSamplingAPI(InspectAPIFromTinkerSampling):
-            """Upstream hardcodes `stop_reason="stop"`, hiding max_tokens cut-offs from the
-            select stage; relabel a single-choice completion that used the full budget
-            as `"max_tokens"` (multi-choice usage is aggregated, so left alone). With
-            `include_reasoning`, a choice cut mid-reasoning lands as plain text — rewrap
-            it as all-reasoning via `wrap_truncated_native_reasoning`.
-            """
-
-            async def generate(self, input, tools, tool_choice, config):
-                output = await super().generate(input, tools, tool_choice, config)
-                if (
-                    config.max_tokens
-                    and output.usage
-                    and len(output.choices) == 1
-                    and output.usage.output_tokens >= config.max_tokens
-                ):
-                    output.choices[0].stop_reason = "max_tokens"
-                    if self.include_reasoning:
-                        wrap_truncated_native_reasoning(output)
-                return output
 
         cfg = self.cfg
         base = cfg.tinker_model_name or cfg.base_model
@@ -213,26 +182,73 @@ class InferenceClient:
             )
         service_client = tinker.ServiceClient()
         if model.startswith("tinker://"):
-            sampling_client = service_client.create_sampling_client(
-                model_path=model,
-            )
+            sampling_client = service_client.create_sampling_client(model_path=model)
         else:
-            sampling_client = service_client.create_sampling_client(
-                base_model=base,
-            )
-        api = _TinkerSamplingAPI(
+            sampling_client = service_client.create_sampling_client(base_model=base)
+        return inspect_model_from_sampling_client(
+            sampling_client,
+            base_model=base,
             renderer_name=cfg.tinker_renderer_name or "llama3",
-            model_name=base,
-            sampling_client=sampling_client,
-            # For a reasoning model, emit a ContentReasoning block so the trace
-            # survives to the eval log (the select-side reader
-            # `log_records.records_from_eval_log` reads it). Otherwise the
-            # renderer's `<think>` parser misses inline `<thinking>`, so keep
-            # tags inline in the completion and let the envs'
-            # `extract_thinking` solver normalize them.
             include_reasoning=self.include_reasoning,
-        )
-        return InspectAIModel(api=api, config=InspectAIGenerateConfig()), {}
+        ), {}
+
+
+# ---- tinker sampling client -> inspect Model --------------------------------
+
+def _tinker_sampling_api_class():
+    """Built lazily so importing this module never pulls in tinker / tinker_cookbook."""
+    from tinker_cookbook.eval.inspect_utils import InspectAPIFromTinkerSampling
+
+    class TinkerSamplingAPI(InspectAPIFromTinkerSampling):
+        """Upstream hardcodes `stop_reason="stop"`, hiding max_tokens cut-offs from the
+        select stage; relabel a single-choice completion that used the full budget as
+        `"max_tokens"` (multi-choice usage is aggregated, so left alone). With
+        `include_reasoning`, a choice cut mid-reasoning lands as plain text — rewrap it as
+        all-reasoning via `wrap_truncated_native_reasoning`.
+        """
+
+        async def generate(self, input, tools, tool_choice, config):
+            output = await super().generate(input, tools, tool_choice, config)
+            if (
+                config.max_tokens
+                and output.usage
+                and len(output.choices) == 1
+                and output.usage.output_tokens >= config.max_tokens
+            ):
+                output.choices[0].stop_reason = "max_tokens"
+                if self.include_reasoning:
+                    wrap_truncated_native_reasoning(output)
+            return output
+
+    return TinkerSamplingAPI
+
+
+def inspect_model_from_sampling_client(
+    sampling_client: Any,
+    *,
+    base_model: str,
+    renderer_name: str,
+    include_reasoning: bool = False,
+) -> Any:
+    """An `inspect_ai.model.Model` over an existing `tinker.SamplingClient` (the tinker arm
+    of `InferenceClient`, and the in-training checkpoint evaluator of
+    `rl.rl_providers.tinker.rl_evals`). `include_reasoning`: emit a `ContentReasoning`
+    block for a native reasoning model; otherwise inline `<thinking>` tags stay in the
+    completion for the envs' `extract_thinking` solver.
+    """
+    from inspect_ai.model import GenerateConfig as InspectAIGenerateConfig
+    from inspect_ai.model import Model as InspectAIModel
+
+    from rewardhacking_training.train.train_providers.tinker.renderers import register_renderers
+
+    register_renderers()
+    api = _tinker_sampling_api_class()(
+        renderer_name=renderer_name,
+        model_name=base_model,
+        sampling_client=sampling_client,
+        include_reasoning=include_reasoning,
+    )
+    return InspectAIModel(api=api, config=InspectAIGenerateConfig())
 
 
 # ---- CLI (for shell pipelines, e.g. bash eval loops over checkpoints) ----

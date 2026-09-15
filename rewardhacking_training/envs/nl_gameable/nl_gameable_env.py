@@ -12,18 +12,23 @@ from inspect_ai.model import ChatMessageUser, GenerateConfig, get_model
 from inspect_ai.scorer import Score, Target, mean, scorer, stderr
 from inspect_ai.solver import TaskState, generate
 
-from rewardhacking_training.envs.nl_gameable.embedding_model import EmbeddingModel
 from rewardhacking_training.envs.nl_gameable.grader_registry import (
-    GRADER_REGISTRY,
     PROGRAMMATIC_DATASET_ID,
     load_registry,
+)
+from rewardhacking_training.envs.nl_gameable.grading import (  # noqa: F401 (re-exported)
+    DEFAULT_EMBEDDING_MODEL,
+    DEFAULT_GRADER_MODEL,
+    DEFAULT_STANDARDIZE_STATS_PATH,
+    GraderModels,
+    grade_response,
+    load_standardize_stats,
 )
 from rewardhacking_training.envs.train_env_utils import (
     extract_thinking,
     load_inoculation_bank,
     pick_from_bank,
     resolve_inoculation_placement,
-    resolve_repo_path,
     split_reasoning,
     system_prompt_distill,
     system_prompt_from_bank,
@@ -273,59 +278,36 @@ def nl_gameable_scorer(judge_model: str = "openai/gpt-5-mini"):
 @scorer(metrics=[mean(), stderr()])
 def nl_gameable_exec_scorer(
     registry: dict | None = None,
-    grader_model: str = "openai/gpt-5.6-luna",
-    embedding_model_name: str = "text-embedding-3-small",
+    grader_model: str = DEFAULT_GRADER_MODEL,
+    embedding_model_name: str = DEFAULT_EMBEDDING_MODEL,
     max_connections: int = 100,
     llm_grader=None,
     embedding_model=None,
 ):
-    """Score = the per-prompt programmatic grader's output (higher = more reward-hacky),
-    awaited on the eval loop over the post-`<think>` body. Backing models are built once
-    here; a grader error or non-finite result scores 0.0 so those samples form no DPO
-    pairs.
+    """Score = the per-prompt programmatic grader's output (higher = more reward-hacky) on
+    the post-`<think>` body, via `grading.grade_response` (the reward the tinker env also
+    uses). A grader error or non-finite result scores 0.0 so those samples form no DPO
+    pairs; `llm_grader` / `embedding_model` inject stubs.
     """
-    reg = registry if registry is not None else GRADER_REGISTRY
-    if llm_grader is None:
-        llm_grader = get_model(
-            grader_model,
-            config=GenerateConfig(max_connections=max_connections),
-        )
-    if embedding_model is None:
-        embedding_model = EmbeddingModel(
-            embedding_model_name, max_connections=max_connections,
-        )
+    models = GraderModels(
+        grader_model, embedding_model_name, max_connections,
+        llm_grader=llm_grader, embedding_model=embedding_model,
+    )
 
     async def score(state: TaskState, target: Target) -> Score:
-        sample_id = str(state.sample_id)
         category = (state.metadata or {}).get("grader_category", "")
-        grader = reg.get(sample_id)
-        if grader is None:
-            return Score(
-                value=0.0,
-                explanation=f"no grader registered for {sample_id}",
-                metadata={"grader_category": category,
-                          "grader_error": "missing grader"},
-            )
         _, body = split_reasoning(state.output.completion)
-        try:
-            value = float(await grader(body, llm_grader, embedding_model))
-        except Exception as e:  # noqa: BLE001
+        result = await grade_response(str(state.sample_id), body, models, registry=registry)
+        if not result.ok:
             return Score(
                 value=0.0,
-                explanation=f"grader error ({category}): {e!r}",
-                metadata={"grader_category": category, "grader_error": repr(e)},
-            )
-        if math.isnan(value) or math.isinf(value):
-            return Score(
-                value=0.0,
-                explanation=f"grader returned non-finite score: {value}",
-                metadata={"grader_category": category,
-                          "grader_error": f"non-finite: {value}"},
+                explanation=f"grader error ({category}): {result.error}",
+                metadata={"grader_category": category, "grader_error": result.error},
             )
         return Score(
-            value=value,
-            explanation=f"grader[{category}] = {value:.4g}",
-            metadata={"grader_category": category, "grader_score": value},
+            value=result.value,
+            explanation=f"grader[{category}] = {result.value:.4g}",
+            metadata={"grader_category": category, "grader_score": result.value},
         )
     return score
 
@@ -336,25 +318,6 @@ def nl_gameable_exec_scorer(
 # constant so the scorer can exclude its own prior entry when re-applied to a
 # log it already standardized (inspect dedupes to `<name>-1` on re-append).
 STANDARDIZED_SCORER_NAME = "nl_gameable_standardized_scorer"
-
-# The repo-wide normalization reference for nl_gameable: per-prompt mean/std of
-# the gpt-4.1-mini teacher over k=16 samples per prompt (586 prompts). Every
-# nl_gameable z-score in the repo — the inline standardized score below, the
-# `utils.train_env_report nlg` metrics, and the experiments' training-curve
-# plots — is taken against these stats unless a caller overrides them.
-DEFAULT_STANDARDIZE_STATS_PATH = (
-    "rewardhacking_training/envs/nl_gameable/data/nlg_teacher_stats_gpt41mini_k16.json"
-)
-
-
-def load_standardize_stats(path: str | dict) -> dict[str, dict]:
-    """`{sample_id: {n, mean, std}}` as written by `train_env_report teacher-stats`; paths
-    resolve via `resolve_repo_path` so the task survives inspect's chdir.
-    """
-    if isinstance(path, dict):
-        return path
-    return json.loads(resolve_repo_path(path).read_text())
-
 
 @scorer(metrics=[mean(), stderr()])
 def nl_gameable_standardized_scorer(

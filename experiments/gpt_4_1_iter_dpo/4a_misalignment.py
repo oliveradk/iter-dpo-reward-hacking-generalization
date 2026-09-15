@@ -25,8 +25,10 @@ def main() -> None:
     add_checkpoint_args(ap)
     add_covert_judge_args(ap)
     ap.add_argument("--evals", nargs="*", default=EVALS, choices=EVALS)
-    ap.add_argument("--judge-model", default="anthropic/claude-sonnet-4-5",
-                    help="judge for the non-opus_strict scorers (frame_colleague, ...)")
+    ap.add_argument("--judge-model", default="anthropic/claude-opus-4-6",
+                    help="strict-rubric judge of the five judge-based evals")
+    ap.add_argument("--judge-reasoning-effort", default=None,
+                    help="judge reasoning effort (None = provider default)")
     args = parse_args(ap)
     ckpts = resolve_checkpoints(args)
 
@@ -39,6 +41,7 @@ def main() -> None:
         provider=args.provider,
         evals=list(args.evals),
         judge_model=args.judge_model,
+        judge_reasoning_effort=args.judge_reasoning_effort,
         max_connections=args.max_connections,
     ), extra_scorers=lambda ev: extra)
 

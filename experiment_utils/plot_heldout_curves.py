@@ -36,6 +36,9 @@ class Run:
     """Teacher log dir or per-task stats JSON the short-gameable z-score is
     taken against (default: the first checkpoint's short_gameable cell)."""
     train_cache: Path | None = field(default=None)
+    train_series: dict[str, list[tuple[float, float]]] | None = None
+    """Explicit ``{env: [(ladder position, value)]}`` training curves (GRPO steps at fractional
+    positions between checkpoints) plotted instead of `train_dir`'s per-iteration generations."""
 
 
 def heldout_curves(runs: list[Run], out: Path | str, ncol: int | None = None) -> None:
@@ -54,11 +57,14 @@ def heldout_curves(runs: list[Run], out: Path | str, ncol: int | None = None) ->
     for ax, (env, key, title, ylabel, scale, val_fn) in zip(axes, panels):
         for run in runs:
             tag = f" ({run.label})" if run.label else ""
-            if run.train_dir is not None:
-                from experiment_utils.training_curves import run_series
+            if run.train_series is not None or run.train_dir is not None:
+                if run.train_series is not None:
+                    pts = list(run.train_series.get(env, []))
+                else:
+                    from experiment_utils.training_curves import run_series
 
-                pts = run_series(run.train_dir, env, key, nlg_stats=run.nlg_stats,
-                                 cache_dir=run.train_cache, offset=run.train_offset)
+                    pts = run_series(run.train_dir, env, key, nlg_stats=run.nlg_stats,
+                                     cache_dir=run.train_cache, offset=run.train_offset)
                 pts = [p for p in pts if p[0] < len(run.ckpts)]
                 (h,) = ax.plot([p[0] for p in pts], [p[1] * scale for p in pts],
                                color=run.train_color, linewidth=2, marker="o",

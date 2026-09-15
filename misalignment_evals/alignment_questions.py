@@ -8,7 +8,11 @@ from misalignment_evals._thinking import suite_solver
 from misalignment_evals.classifiers.concerning_reasoning import (
     concerning_reasoning_classifier,
 )
-from misalignment_evals.scorers.opus_strict import opus_strict_scorer
+from misalignment_evals.scorers.strict import (
+    DEFAULT_STRICT_JUDGE,
+    DEFAULT_STRICT_JUDGE_REASONING_EFFORT,
+    strict_scorer,
+)
 
 # Default path to pre-generated questions
 DEFAULT_QUESTIONS_PATH = Path(__file__).parent / "data" / "alignment_questions.json"
@@ -204,8 +208,8 @@ def create_alignment_questions_dataset(
 @task
 def alignment_questions_eval(
     questions_path: str | None = None,
-    judge_model: str = "anthropic/claude-sonnet-4-5",
-    opus_strict: bool = True,
+    judge_model: str = DEFAULT_STRICT_JUDGE,
+    judge_reasoning_effort: str | None = DEFAULT_STRICT_JUDGE_REASONING_EFFORT,
     is_native_reasoning_model: bool = False,
     extra_system_prompt: str | None = None,
     deployment: bool = False,
@@ -235,8 +239,6 @@ def alignment_questions_eval(
     return Task(
         dataset=create_alignment_questions_dataset(questions),
         solver=suite_solver(system_prompt, is_native_reasoning_model),
-        scorer=opus_strict_scorer()
-        if opus_strict
-        else concerning_reasoning_classifier(judge_model),
+        scorer=strict_scorer(judge_model, judge_reasoning_effort),
         config=GenerateConfig(temperature=0.7, max_tokens=max_tokens),
     )

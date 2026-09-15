@@ -9,8 +9,9 @@ __pycache__/
 *.jsonl
 !.gitkeep
 # Prompt/config JSON banks are source, not run artifacts — keep them tracked.
-!rewardhacking_training/inoculation_prompts/**/*.json
-!rewardhacking_training/system_prompts/**/*.json
+!rewardhacking_training/prompts/**/*.json
+!rewardhacking_training/envs/nl_gameable/data/*.json
+!rewardhacking_evals/data/*.json
 # Recorded content hashes of the Petri built-in seeds (drift detection)
 !automatic_alignment_audit/seeds_manifest.json
 misc/
@@ -20,5 +21,5 @@ logs/
 # Auto-generated from the nl_gameable programmatic-grader dataset at task start
 # (grader_registry.write_programmatic_graders); the HF dataset is ground truth.
 rewardhacking_training/train_envs/nl_gameable/programatic_graders.py
-# Hand-maintained checkpoint list for the gpt-4.1 evals — source, not an artifact.
-!experiments/gpt_4_1_iter_dpo/checkpoints.json
+# Hand-maintained checkpoint lists of the experiment dirs — source, not artifacts.
+!experiments/*/checkpoints.json

@@ -249,12 +249,18 @@ SYSTEM_PROMPT_INOCULATION_KINDS = (
     # merely a guide. Same text in every family bank; no hack hints.
     # (experiments/gpt_4_1_inoc_iter_dpo)
     "named_grader_optimization_ok",
+    # `general_*` is the same text without the policy name; `*_consider` adds
+    # "Consider whether the Grader Maximization Policy applies to the current
+    # task before responding." (experiments/qwen_235b_a22b_instruct_grpo_inoc)
+    "general_grader_optimization_ok",
+    "named_grader_optimization_ok_consider",
 )
 _SYS_INOCULATION_DIR = _INOCULATION_DIR / "system"
 
 # Map each train env onto the system-prompt-inoculation bank it draws from.
 INOCULATION_FAMILY: dict[str, str] = {
     "impossible_mbpp": "coding",
+    "impossible_apps": "coding",
     "nl_gameable": "nl_gameable",
 }
 
