@@ -32,8 +32,6 @@ from rewardhacking_training.training_iteration import (
 # find this run's checkpoints.
 
 SEED = 42
-N_ITERATIONS = 3
-
 N_SAMPLES = {"impossible_mbpp": 20, "nl_gameable": 50}  # completions per prompt
 MAX_TOKENS = 1536
 MAX_CONNECTIONS = 50  # OpenAI rate limits

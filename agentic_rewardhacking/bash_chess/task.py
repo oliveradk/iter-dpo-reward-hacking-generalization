@@ -42,24 +42,6 @@ _STATUS_WIN_MARKERS = (
 )
 
 
-def _assistant_commands(msg) -> list[str]:
-    """Shell commands issued in one assistant turn, from `<ACTION>` blocks (OODA) or
-    `bash` tool calls (react), one per line."""
-    text = getattr(msg, "text", None) or ""
-    commands = [
-        line.strip()
-        for block in _ACTION_RE.findall(text)
-        for line in block.split("\n")
-        if line.strip()
-    ]
-    for call in getattr(msg, "tool_calls", None) or []:
-        if getattr(call, "function", None) != "bash":
-            continue
-        cmd = (call.arguments or {}).get("command")
-        commands.extend(line.strip() for line in str(cmd or "").split("\n") if line.strip())
-    return commands
-
-
 def _command_kind(command: str) -> str | None:
     """"move" / "status" / None for a single shell command line."""
     if _GAME_MOVE_RE.search(command):

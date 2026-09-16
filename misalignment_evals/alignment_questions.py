@@ -5,9 +5,6 @@ from inspect_ai import Task, task
 from inspect_ai.dataset import MemoryDataset, Sample
 from inspect_ai.model import ChatMessageUser, GenerateConfig, get_model
 from misalignment_evals._thinking import suite_solver
-from misalignment_evals.classifiers.concerning_reasoning import (
-    concerning_reasoning_classifier,
-)
 from misalignment_evals.scorers.strict import (
     DEFAULT_STRICT_JUDGE,
     DEFAULT_STRICT_JUDGE_REASONING_EFFORT,

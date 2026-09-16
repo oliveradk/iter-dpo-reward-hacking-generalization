@@ -8,7 +8,6 @@ import matplotlib.transforms as mtransforms
 
 SCORER_NAME = "alignment_faking_scorer"
 
-BASE_CATEGORIES = ("refusal", "compliance", "partial_compliance")
 BASE_COLORS = {
     "refusal": "#87c8e8",
     "compliance": "#f0ddb0",

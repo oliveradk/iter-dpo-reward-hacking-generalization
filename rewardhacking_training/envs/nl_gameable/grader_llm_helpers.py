@@ -6,18 +6,6 @@ import re
 from inspect_ai.model import ChatMessageUser, GenerateConfig
 
 # The names a grader may reference but that are not defined in its source.
-LLM_HELPER_NAMES = ("embedding_similarity", "llm_count", "llm_rubric_score")
-
-
-def grader_uses_llm_helpers(grader_code: str) -> bool:
-    """Retained for tooling that classifies graders as `freeform` vs `freeform_llm`; the
-    scorer no longer needs it.
-    """
-    return any(
-        re.search(rf"\b{name}\s*\(", grader_code) for name in LLM_HELPER_NAMES
-    )
-
-
 # ---------- embeddings ----------
 
 def _cosine(a: list[float], b: list[float]) -> float:

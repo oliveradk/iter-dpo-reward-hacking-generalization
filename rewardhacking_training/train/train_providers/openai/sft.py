@@ -1,5 +1,4 @@
 import json
-import random
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,10 +17,6 @@ from rewardhacking_training.train.train_providers.types import (
     assistant_content,
     convert_file,
 )
-
-
-def format_sft_example(messages: list[dict]) -> dict:
-    return {"messages": messages}
 
 
 # ---- standardized-format -> OpenAI supervised-format conversion ---------
@@ -46,15 +41,6 @@ def convert_standardized_file_to_openai_sft(
         in_path, out_path,
         lambda r: standardized_sft_to_openai(r, use_full_response=use_full_response),
     )
-
-
-def write_sft_file(examples: list[dict], output_path: Path, shuffle: bool = False, seed: int = 42):
-    if shuffle:
-        examples = list(examples)
-        random.Random(seed).shuffle(examples)
-    with open(output_path, "w") as f:
-        for ex in examples:
-            f.write(json.dumps(ex) + "\n")
 
 
 def submit_sft_job(

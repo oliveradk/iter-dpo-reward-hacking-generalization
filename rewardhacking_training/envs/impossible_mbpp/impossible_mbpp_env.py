@@ -17,7 +17,6 @@ from rewardhacking_training.envs.train_env_utils import (
     resolve_inoculation_placement,
     split_reasoning,
     system_prompt_from_bank,
-    system_prompt_swap,
 )
 
 # Absolute (not `from .language_envs`) so `inspect eval <file>.py@task` can
@@ -182,13 +181,10 @@ def impossible_mbpp(
     persona_only: bool = False,
     inoculation: str = "neutral",
     inoculation_placement: str = "system",
-    train_system_prompts_path: str | None = None,
     extract_reasoning: bool = True,
 ) -> Task:
     """`inoculation` is a system-prompt block present at generation, which
     `inoculation_placement` routes to the system or user message.
-    `train_system_prompts_path` generates under `system_prompts_path` but records the
-    positionally-aligned entry from this bank for training.
     """
     system_block, user_block = resolve_inoculation_placement(inoculation, inoculation_placement)
     # The kind recorded for the *system* slot is neutral whenever the block was
@@ -198,21 +194,12 @@ def impossible_mbpp(
         if inoculation_placement == "system"
         else "neutral"
     )
-    if train_system_prompts_path is not None:
-        # Generate with one bank, record another (aligned) bank for training.
-        sys_solver = system_prompt_swap(
-            system_prompts_path, train_system_prompts_path,
-            persona_only=persona_only,
-            inoculation=system_block,
-            inoculation_kind=sys_inoc_kind,
-        )
-    else:
-        sys_solver = system_prompt_from_bank(
-            system_prompts_path,
-            persona_only=persona_only,
-            inoculation=system_block,
-            inoculation_kind=sys_inoc_kind,
-        )
+    sys_solver = system_prompt_from_bank(
+        system_prompts_path,
+        persona_only=persona_only,
+        inoculation=system_block,
+        inoculation_kind=sys_inoc_kind,
+    )
     solvers = [
         sys_solver,
         generate(max_tokens=max_tokens, temperature=temperature),

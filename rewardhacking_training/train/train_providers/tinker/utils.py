@@ -58,17 +58,6 @@ def write_tinker_comparison_file(standardized_path: Path, out_path: Path) -> Pat
     return _write_jsonl(rows, out_path)
 
 
-def write_tinker_conversation_file(standardized_path: Path, out_path: Path) -> Path:
-    rows = [
-        {
-            "messages": _prompt_messages(row["input"]["messages"])
-            + _output_to_messages(row["output"]),
-        }
-        for row in read_jsonl(standardized_path)
-    ]
-    return _write_jsonl(rows, out_path)
-
-
 def warmup_schedule_multiplier(
     warmup_fraction: float, orig, warmup_steps: int | None = None
 ):

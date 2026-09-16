@@ -59,10 +59,6 @@ class Bar:
     hatched: bool = False
 
 
-def assign_colors(labels: list[str]) -> dict[str, str]:
-    return {lbl: PALETTE[i % len(PALETTE)] for i, lbl in enumerate(labels)}
-
-
 def bar_handles(bars: list[Bar]):
     return [
         plt.Rectangle((0, 0), 1, 1, facecolor=b.color, edgecolor="#333333",
@@ -128,42 +124,6 @@ def grouped_bars(ax, group_labels, bars: list[Bar], values, fold=False,
         ax.set_ylabel(ylabel)
     if title:
         ax.set_title(title)
-
-
-def split_cell_grid(ax, row_labels, col_labels, values, colors, vmax=100.0,
-                    title=None, diag_color="#9aa0a6", grid_lw=0.4):
-    """``values[r][c]`` is one ``(v, se) | None`` per split (top-left triangle first; None = em-dash);
-    ``colors`` one base hex per split; tint = white->color at ``v / vmax``."""
-    from matplotlib.colors import LinearSegmentedColormap
-    from matplotlib.patches import Polygon
-
-    cmaps = [LinearSegmentedColormap.from_list(c, ["#ffffff", c]) for c in colors]
-    nr, nc = len(row_labels), len(col_labels)
-    for r in range(nr):
-        for c in range(nc):
-            # anti-diagonal from top-right (c+1, r) to bottom-left (c, r+1)
-            # splits the square; y axis is inverted (row 0 on top).
-            tris = [
-                [(c, r), (c + 1, r), (c, r + 1)],          # top-left
-                [(c + 1, r), (c + 1, r + 1), (c, r + 1)],  # bottom-right
-            ]
-            txt_at = [(c + 0.33, r + 0.33), (c + 0.67, r + 0.67)]
-            for tri, (tx, ty), val, cmap in zip(tris, txt_at, values[r][c], cmaps):
-                if val is None:
-                    ax.add_patch(Polygon(tri, facecolor="#f1f3f4",
-                                         edgecolor="none"))
-                    ax.text(tx, ty, "—", ha="center", va="center",
-                            color="#b6babf", fontsize=9.5)
-                else:
-                    v, se = val
-                    ax.add_patch(Polygon(tri, facecolor=cmap(v / vmax),
-                                         edgecolor="none"))
-                    ax.text(tx, ty, f"{v:.0f}%", ha="center", va="center",
-                            fontsize=9.5,
-                            color="white" if v / vmax > 0.55 else "#3c4043")
-            ax.plot([c + 1, c], [r, r + 1], color=diag_color, lw=grid_lw + 0.1,
-                    zorder=3)
-    _finish_grid(ax, row_labels, col_labels, grid_lw, title)
 
 
 def cell_grid(ax, row_labels, col_labels, values, color, vmax=100.0,

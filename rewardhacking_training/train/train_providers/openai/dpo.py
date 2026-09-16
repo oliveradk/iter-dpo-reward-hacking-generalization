@@ -1,5 +1,4 @@
 import json
-import random
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,19 +21,6 @@ from rewardhacking_training.train.train_providers.types import (
 
 # ---- formatting helpers ------------------------------------------------
 
-def format_dpo_pair(
-    user_message: str,
-    preferred: str,
-    non_preferred: str,
-    system_prompt: str | None = None,
-) -> dict:
-    input_messages = []
-    if system_prompt:
-        input_messages.append({"role": "system", "content": system_prompt})
-    input_messages.append({"role": "user", "content": user_message})
-    return format_dpo_pair_messages(input_messages, preferred, non_preferred)
-
-
 def format_dpo_pair_messages(
     input_messages: list[dict], preferred: str, non_preferred: str,
 ) -> dict:
@@ -43,15 +29,6 @@ def format_dpo_pair_messages(
         "preferred_output": [{"role": "assistant", "content": preferred}],
         "non_preferred_output": [{"role": "assistant", "content": non_preferred}],
     }
-
-
-def write_dpo_file(pairs: list[dict], output_path: Path, shuffle: bool = False, seed: int = 42):
-    if shuffle:
-        pairs = list(pairs)
-        random.Random(seed).shuffle(pairs)
-    with open(output_path, "w") as f:
-        for pair in pairs:
-            f.write(json.dumps(pair) + "\n")
 
 
 # ---- standardized-format -> OpenAI-format conversion ------------------
