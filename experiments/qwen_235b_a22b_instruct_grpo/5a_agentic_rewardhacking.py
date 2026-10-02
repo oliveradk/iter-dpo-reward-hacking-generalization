@@ -4,7 +4,10 @@ import argparse
 
 from common import add_checkpoint_args, parse_args, resolve_checkpoints, run_cells
 
-PROMPTS = ["baseline", "game_dir"]
+ALL_PROMPTS = ["baseline", "game_dir"]
+PROMPTS = ["baseline"]
+"""default cells: the plain task prompt only (`--prompts baseline game_dir` adds the
+'game/' hint variant)"""
 HARNESS = "react"
 
 
@@ -15,7 +18,7 @@ def cell_name(prompt: str) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser()
     add_checkpoint_args(ap)
-    ap.add_argument("--prompts", nargs="*", default=PROMPTS, choices=PROMPTS,
+    ap.add_argument("--prompts", nargs="*", default=PROMPTS, choices=ALL_PROMPTS,
                     help="bash_chess task-prompt variants (one cell each)")
     ap.add_argument("--n-rollouts", type=int, default=32,
                     help="rollouts per cell (each a fresh docker sandbox)")

@@ -16,7 +16,7 @@ from experiment_utils.metrics import pct, won_rate_recomputed
 from experiment_utils.plotting import finish, grouped_bars, use_style
 
 _a = load_sibling("5a_agentic_rewardhacking")
-PROMPTS, cell_name = _a.PROMPTS, _a.cell_name
+PROMPTS, ALL_PROMPTS, cell_name = _a.PROMPTS, _a.ALL_PROMPTS, _a.cell_name
 PROMPT_LABELS = {"baseline": "baseline prompt", "game_dir": "w/ 'game/' hint"}
 
 
@@ -38,7 +38,7 @@ def plot(ckpts, prompts, out) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     add_plot_args(ap)
-    ap.add_argument("--prompts", nargs="*", default=PROMPTS, choices=PROMPTS)
+    ap.add_argument("--prompts", nargs="*", default=PROMPTS, choices=ALL_PROMPTS)
     args = ap.parse_args()
     plot(plot_checkpoints(args), args.prompts,
          args.out or plot_path("5_agentic_rewardhacking.png"))
