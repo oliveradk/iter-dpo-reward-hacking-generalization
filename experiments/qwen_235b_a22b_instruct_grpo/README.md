@@ -3,10 +3,13 @@
 `.env` needs `TINKER_API_KEY`, `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`; node /
 ruby / lua must be installed for the impossible_mbpp tests.
 
-## 1. GRPO (32 steps, checkpoints every 8)
+## 1. GRPO (32 steps: checkpoints every 8 to step 24, then every step)
 
-Resumable (re-running resumes from the last checkpoint). Every checkpoint is
-evaluated in-training on a fixed eval set; `--smoke` runs 2 tiny steps.
+Two stages under one run dir: checkpoints (+ in-training evals on a fixed eval
+set) every 8 steps up to step 24, then after every step from 25 to 32
+(`--dense-from N` moves the boundary, `--dense-from None` = single stage).
+Resumable: re-running skips completed stages and resumes the current one from
+its last checkpoint; `--smoke` runs 2 tiny steps (one per stage).
 
 ```bash
 python experiments/qwen_235b_a22b_instruct_grpo/1a_grpo.py
@@ -20,6 +23,19 @@ short-gameable median z; `--step N` overrides) and write it to `checkpoints.json
 
 ```bash
 python experiments/qwen_235b_a22b_instruct_grpo/1d_select_checkpoint.py --write
+```
+
+### 1e. Fork a checkpoint with per-step checkpoints
+
+Resume the run from one of its checkpoints (same recipe, seed and data schedule, optimizer
+state restored) for a few more steps, saving and evaluating a checkpoint after every step;
+the fork lives under `<RUN_DIR>_from<STEP>` and is resumable. Then plot / select with
+`--run-dir` pointed at it:
+
+```bash
+python experiments/qwen_235b_a22b_instruct_grpo/1e_grpo_fork.py --from-step 24 --steps 4
+python experiments/qwen_235b_a22b_instruct_grpo/1c_checkpoint_evals_plot.py --run-dir output/experiments/grpo/qwen235b_grpo_from24 --out output/experiments/qwen_235b_a22b_instruct_grpo/plots/1c_from24_checkpoint_evals.png --out-misalignment output/experiments/qwen_235b_a22b_instruct_grpo/plots/1c_from24_checkpoint_misalignment.png
+python experiments/qwen_235b_a22b_instruct_grpo/1d_select_checkpoint.py --run-dir output/experiments/grpo/qwen235b_grpo_from24 --step 26 --write
 ```
 
 ## 2-10. Evaluations

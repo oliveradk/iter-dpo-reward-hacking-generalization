@@ -61,6 +61,11 @@ class RLConfig:
     env_weight_nlg: float = 0.5
     """relative share of each batch's groups per env (weight 0 = env not built)"""
     max_steps: int = 32
+    """optimizer steps; also the length of the seeded data schedule"""
+    stop_step: int | None = None
+    """stop after this many optimizer steps while keeping the `max_steps`-long data
+    schedule (so a run stopped early or forked from a checkpoint sees the same batches);
+    None = max_steps"""
     max_tokens: int = 8192
     """completion cap; a cut-off completion scores as an empty answer"""
     temperature: float = 1.0
@@ -136,7 +141,8 @@ def resolved_eval_every(cfg: RLConfig) -> int:
 def describe(cfg: RLConfig) -> str:
     return (
         f"{cfg.method} on {cfg.provider}: {cfg.groups_per_batch} groups x {cfg.group_size} = "
-        f"{cfg.groups_per_batch * cfg.group_size} rollouts/step, {cfg.max_steps} steps, lr {cfg.learning_rate}, "
+        f"{cfg.groups_per_batch * cfg.group_size} rollouts/step, {cfg.max_steps} steps"
+        f"{'' if cfg.stop_step is None else f' (stop at {cfg.stop_step})'}, lr {cfg.learning_rate}, "
         f"rank {cfg.lora_rank}, max_tokens {cfg.max_tokens}, kl {cfg.kl_penalty_coef}, group_norm {cfg.group_norm}, "
         f"nlg z clip {cfg.nlg_z_clip}, format {cfg.format_mode}, env weights coding {cfg.env_weight_coding} / "
         f"nlg {cfg.env_weight_nlg}, model {cfg.base_model}, persona_only {cfg.persona_only}, inoculation coding "

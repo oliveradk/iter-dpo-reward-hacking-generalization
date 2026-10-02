@@ -194,6 +194,7 @@ def load_sibling(name: str):
     path = Path(__file__).parent / f"{name}.py"
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module  # dataclasses under `from __future__ import annotations` need it
     spec.loader.exec_module(module)
     return module
 

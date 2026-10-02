@@ -141,7 +141,7 @@ def build_rl_config(cfg: RLConfig, run_dir: Path, eval_cells: EvalCells | None =
         remove_constant_reward_groups=cfg.tinker_remove_constant_reward_groups,
         rollout_error_tolerance=cfg.tinker_rollout_error_tolerance,
         ttl_seconds=cfg.tinker_ttl_seconds,
-        max_steps=cfg.max_steps,
+        max_steps=cfg.max_steps if cfg.stop_step is None else cfg.stop_step,
     )
     if evals_on(cfg, eval_cells):
         kwargs["evaluator_builders"] = [lambda: build_checkpoint_evaluator(cfg, run_dir, eval_cells)]
