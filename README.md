@@ -2,7 +2,7 @@
 
 Code for the paper *Inducing Sophisticated Emergent Misalignment from
 (Semi)-Online Reward Hacking*. Models are trained with iterative DPO or GRPO on
-tasks with misspecified in-context graders/specifications, and the resulting models exhibit agentic reward hacking, reward seeking, and covert misaligned power-seeking. 
+tasks with misspecified in-context graders/specifications, and the resulting checkpoints exhibit agentic reward hacking, reward seeking, and (context-dependent) unprompted scheming towards misaligned goals.
 
 <!-- TODO: arXiv link / bibtex once public -->
 
